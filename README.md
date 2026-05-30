@@ -1,4 +1,21 @@
-# 🛡️ Security Check
+# 🛡️ Security Check — DEPRECATED
+
+> ## ⚠️ This repo is deprecated and will be archived
+>
+> **Why:** Security Check was a UI-only heuristic report, not a real Home
+> Assistant security audit. It did not query Home Assistant security state or
+> validate findings server-side, so the tool could create misleading security
+> signals.
+>
+> **HACS status:** [PR #6362](https://github.com/hacs/default/pull/6362) was
+> closed by HACS reviewers. This repository will not be resubmitted.
+>
+> **What to use instead:** use Home Assistant's built-in security guidance,
+> review integrations and long-lived access tokens directly in HA settings, and
+> rely on upstream HA documentation for hardening steps.
+>
+> Existing installs will continue to work as-is, but no further updates will be
+> published.
 
 ![Preview](banner.png)
 
