@@ -1,4 +1,4 @@
-# Changelog — Security Check
+# Changelog — Config Auditor
 
 ## [4.1.3] - 2026-05-12
 
@@ -7,7 +7,7 @@
 - Normalized bare `font-family: "Inter", sans-serif` declarations to a complete cross-platform system stack.
 - Privacy section in README: claim now matches behaviour (no CDN dependencies).
 
-All notable changes to **Security Check** are documented here.
+All notable changes to **Config Auditor** are documented here.
 
 ## [4.0.0] - 2026-05-10
 
@@ -15,7 +15,7 @@ All notable changes to **Security Check** are documented here.
 - **Split from `MacSiem/ha-tools` monorepo** into a dedicated standalone HACS plugin.
 - Bundled Bento Design System CSS inline — no shared dependency required.
 - Inlined `_haToolsEsc` XSS sanitizer.
-- Persistence keys migrated to per-tool namespace `ha-security-check-…` (clean break — old data under `ha-tools-…` is **not** migrated automatically).
+- Persistence keys migrated to per-tool namespace `ha-config-auditor-…` (clean break — old data under `ha-tools-…` is **not** migrated automatically).
 - Donation/support footer added to the panel.
 - Cross-tool discovery banner removed; each tool stands on its own.
 

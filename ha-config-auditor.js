@@ -1,15 +1,15 @@
-/* HA Tools split — ha-security-check v4.1.3 (2026-05-12) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v5.0.0 (2026-06-12) — single-tool standalone repo */
 (function() {
 'use strict';
 
 // -- HA Tools Persistence (stub -- full impl in ha-tools-panel.js) --
-window._haToolsPersistence = window._haToolsPersistence || { _cache: {}, _hass: null, setHass(h) { this._hass = h; }, async save(k, d) { try { localStorage.setItem('ha-security-check-' + k, JSON.stringify(d)); } catch(e) { console.debug('[ha-security-check] caught:', e); } }, async load(k) { try { const r = localStorage.getItem('ha-security-check-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } }, loadSync(k) { try { const r = localStorage.getItem('ha-security-check-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } } };
+window._haToolsPersistence = window._haToolsPersistence || { _cache: {}, _hass: null, setHass(h) { this._hass = h; }, async save(k, d) { try { localStorage.setItem('ha-config-auditor-' + k, JSON.stringify(d)); } catch(e) { console.debug('[ha-config-auditor] caught:', e); } }, async load(k) { try { const r = localStorage.getItem('ha-config-auditor-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } }, loadSync(k) { try { const r = localStorage.getItem('ha-config-auditor-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } } };
 
 const _esc = window._haToolsEsc || ((s) => typeof s === 'string' ? s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]) : (s ?? ''));
 
 /**
- * HA Security Check - Security audit tool for Home Assistant
- * Checks for common security issues: exposed ports, SSL, outdated addons, insecure integrations, etc.
+ * HA Config Auditor - Configuration best-practices audit tool for Home Assistant
+ * Checks common configuration best practices: exposed ports, SSL, outdated addons, auth settings, etc.
  */
 /* ===== HA Tools split — inline shared infrastructure ===== */
 // Bento Design System CSS (inline copy — keeps tool standalone)
@@ -520,7 +520,7 @@ if (typeof window !== 'undefined') {
 // on every split-tool card regardless of internal render state.
 if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
   window.__haToolsSplitDonateInjector = true;
-  var SPLIT_TAGS = ['ha-purge-cache','ha-yaml-checker','ha-data-exporter','ha-baby-tracker','ha-chore-tracker','ha-energy-optimizer','ha-energy-insights','ha-energy-email','ha-log-email','ha-smart-reports','ha-network-map','ha-trace-viewer','ha-automation-analyzer','ha-storage-monitor','ha-backup-manager','ha-security-check','ha-device-health','ha-sentence-manager','ha-encoding-fixer','ha-entity-renamer','ha-frigate-privacy','ha-vacuum-water-monitor'];
+  var SPLIT_TAGS = ['ha-purge-cache','ha-yaml-checker','ha-data-exporter','ha-baby-tracker','ha-chore-tracker','ha-energy-optimizer','ha-energy-insights','ha-energy-email','ha-log-email','ha-smart-reports','ha-network-map','ha-trace-viewer','ha-automation-analyzer','ha-storage-monitor','ha-backup-manager','ha-config-auditor','ha-device-health','ha-sentence-manager','ha-encoding-fixer','ha-entity-renamer','ha-frigate-privacy','ha-vacuum-water-monitor'];
   var DONATE_HTML = ''
     + '<div class="donate-section" data-source="ha-tools-split-injector">'
     + '  <div class="donate-text">'
@@ -566,7 +566,7 @@ if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
     'ha-automation-analyzer': { headline: 'Surface slow / failing / suspicious automations.', steps: ['Overview shows total + health score + top failing.', 'Performance tab ranks by avg runtime.', 'Optimization tab suggests improvements (loops, redundant triggers).'] },
     'ha-storage-monitor': { headline: 'Disk + recorder DB + add-on storage breakdown.', steps: ['Overview shows used / free + per-category breakdown.', 'Backups tab — count + size warning.', 'Cleanup tab — actionable suggestions.'] },
     'ha-backup-manager': { headline: 'Create + list + inspect HA backups.', steps: ['List existing backups (date / size / encryption).', 'Click \'Create backup now\' to invoke backup.create.', 'Restore selected backup.'] },
-    'ha-security-check': { headline: 'Security audit + remediation tips.', steps: ['Overview shows score (X/100) + letter grade.', 'Click warning row for step-by-step remediation.', 'Tips tab — checklist of best practices.'] },
+    'ha-config-auditor': { headline: 'Configuration best-practices audit with remediation tips.', steps: ['Overview shows passed, warning, and failed check counts.', 'Click a finding row for step-by-step remediation.', 'Tips tab — checklist of best practices.'] },
     'ha-device-health': { headline: 'Device battery / signal / last-seen health.', steps: ['List devices grouped by health (OK / Warning / Critical).', 'Filter by low battery (<20%) or weak signal.', 'Click device for model / manufacturer / last seen.'] },
     'ha-encoding-fixer': { headline: 'Detect + fix UTF-8 / mojibake issues across HA.', steps: ['Click \'Scan\' to walk entity registry + states.', 'Per-entity \'Fix\' button calls homeassistant.reload.', 'Optional: deep file scan via shell_command (see README).'] },
     'ha-entity-renamer': { headline: 'Bulk-rename HA entities + friendly names.', steps: ['Pick an entity, set new ID — entity_registry/update.', 'Bulk pattern: sensor.old_* \u2192 sensor.new_*.', 'Optional: rewrite Lovelace dashboard refs.'] },
@@ -697,11 +697,12 @@ if (typeof window !== 'undefined' && !window.__haToolsSplitDonateInjector) {
 }
 /* ============================================================ */
 
-class HASecurityCheck extends HTMLElement {
-  static getConfigElement() { return document.createElement('ha-security-check-editor'); }
-  getCardSize() { return 8; }
+class HAConfigAuditor extends HTMLElement {
+  static getConfigElement() { return document.createElement('ha-config-auditor-editor'); }
+  getCardSize() { return 6; }
+  getGridOptions() { return { rows: 6, columns: 12, min_rows: 3, min_columns: 6 }; }
 
-  static getStubConfig() { return { type: 'custom:ha-security-check', title: 'Security Check' }; }
+  static getStubConfig() { return { type: 'custom:ha-config-auditor', title: 'Config Auditor' }; }
   constructor() {
     super();
     this._toolId = this.tagName.toLowerCase().replace('ha-', '');
@@ -714,7 +715,7 @@ class HASecurityCheck extends HTMLElement {
     this._currentPage = {};
     this._pageSize = 15;
     this._hass = null;
-    this._config = {};
+    this._config = { title: 'Config Auditor' };
     this._activeTab = 'overview';
     this._lang = (navigator.language || '').startsWith('pl') ? 'pl' : 'en';
     this._loading = true;
@@ -725,12 +726,12 @@ class HASecurityCheck extends HTMLElement {
   }
 
   // -- Persistence --
-  _scKey() { return 'ha-security-check-' + (this._config.storage_key || 'default'); }
+  _scKey() { return 'ha-config-auditor-' + (this._config?.storage_key || 'default'); }
   _saveScanData() {
     try {
-      const data = { lastScan: this._lastScan ? this._lastScan.toISOString() : null, lastScore: this._lastScore || null };
+      const data = { lastScan: this._lastScan ? this._lastScan.toISOString() : null };
       localStorage.setItem(this._scKey(), JSON.stringify(data));
-    } catch(e) { console.debug('[security-check]', e.message); }
+    } catch(e) { console.debug('[config-auditor]', e.message); }
   }
   _loadScanData() {
     try {
@@ -738,39 +739,43 @@ class HASecurityCheck extends HTMLElement {
       if (raw) {
         const data = JSON.parse(raw);
         if (data.lastScan) this._lastScan = new Date(data.lastScan);
-        if (data.lastScore !== undefined) this._lastScore = data.lastScore;
       }
-    } catch(e) { console.debug('[security-check]', e.message); }
+    } catch(e) { console.debug('[config-auditor]', e.message); }
   }
 
   set hass(hass) {
-    this._hass = hass;
-    if (!hass) return;
-    const now = Date.now();
-    if (!this._firstHassRender) {
-      this._firstHassRender = true;
-      this._runAudit();
-      this._render();
+    try {
+      this._hass = hass;
+      if (!this._config) this._config = { title: 'Config Auditor' };
+      if (!hass) return;
+      const now = Date.now();
+      if (!this._firstHassRender) {
+        this._firstHassRender = true;
+        this._runAudit();
+        this._render();
+        this._lastRenderTime = now;
+        return;
+      }
+      // Configuration best-practices audit is expensive — only re-run every 5 minutes
+      if (now - (this._lastAuditTime || 0) > 300000) {
+        this._lastAuditTime = now;
+        this._runAudit();
+      }
+      // Throttle render to 60s — audit results are static
+      if (now - (this._lastRenderTime || 0) < 60000) {
+        return;
+      }
       this._lastRenderTime = now;
-      return;
+    } catch(e) {
+      this._renderError(e);
     }
-    // Security audit is expensive — only re-run every 5 minutes
-    if (now - (this._lastAuditTime || 0) > 300000) {
-      this._lastAuditTime = now;
-      this._runAudit();
-    }
-    // Throttle render to 60s — audit results are static
-    if (now - (this._lastRenderTime || 0) < 60000) {
-      return;
-    }
-    this._lastRenderTime = now;
   }
 
 
   get _t() {
     const T = {
       pl: {
-        title: 'Sprawdzanie Bezpieczeństwa',
+        title: 'Audyt konfiguracji',
         loading: 'Wczytywanie...',
         noData: 'Brak danych',
         error: 'Błąd',
@@ -780,7 +785,7 @@ class HASecurityCheck extends HTMLElement {
         locale: 'pl-PL',
       },
       en: {
-        title: 'Security Check',
+        title: 'Config Auditor',
         loading: 'Loading...',
         noData: 'No data',
         error: 'Error',
@@ -794,7 +799,8 @@ class HASecurityCheck extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { title: config.title || 'Security Check', ...config };
+    const cfg = config || {};
+    this._config = { title: cfg.title || 'Config Auditor', ...cfg };
     this._loadScanData();
   }
 
@@ -802,6 +808,28 @@ class HASecurityCheck extends HTMLElement {
   // (Was previously a Unicode normalize hack via decodeURIComponent(escape(...)) — not XSS-safe.)
   _sanitize(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  _renderError(error) {
+    const message = error?.message || String(error || 'Unknown render error');
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        .error {
+          padding: 16px;
+          border: 1px solid var(--error-color, #ef4444);
+          border-radius: 8px;
+          color: var(--primary-text-color, #111827);
+          background: var(--card-background-color, #fff);
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        code { color: var(--error-color, #ef4444); }
+      </style>
+      <div class="error">
+        <strong>Config Auditor could not render.</strong><br>
+        <code>${_esc(message)}</code>
+      </div>
+    `;
   }
 
   async _runAudit() {
@@ -814,15 +842,15 @@ class HASecurityCheck extends HTMLElement {
 
     try {
       let hostInfo = null, osInfo = null, supervisorInfo = null, coreInfo = null;
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/host/info', method: 'get' }); hostInfo = r?.data || r; } catch(e) { console.debug('[security-check]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/os/info', method: 'get' }); osInfo = r?.data || r; } catch(e) { console.debug('[security-check]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/supervisor/info', method: 'get' }); supervisorInfo = r?.data || r; } catch(e) { console.debug('[security-check]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/core/info', method: 'get' }); coreInfo = r?.data || r; } catch(e) { console.debug('[security-check]', e.message); }
+      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/host/info', method: 'get' }); hostInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/os/info', method: 'get' }); osInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/supervisor/info', method: 'get' }); supervisorInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/core/info', method: 'get' }); coreInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // Detect non-supervised HA installation
       if (!hostInfo && !osInfo && !supervisorInfo && !coreInfo) {
         const L = this._lang === 'pl';
-        findings.info.push({ id: 'no_supervisor', title: L ? 'Brak Supervisor API' : 'No Supervisor API detected', desc: L ? 'Cz\u0119\u015B\u0107 sprawdze\u0144 bezpiecze\u0144stwa wymaga HA OS lub HA Supervised (aktualizacje systemu, skanowanie dodatk\u00F3w, analiza sieci).' : 'Some security checks require HA OS or Supervised installation (system updates, addon scanning, network analysis).', fix: L ? 'Zainstaluj Home Assistant OS dla pe\u0142nej ochrony' : 'Install HA OS for full security coverage' });
+        findings.info.push({ id: 'no_supervisor', title: L ? 'Brak Supervisor API' : 'No Supervisor API detected', desc: L ? 'Cz\u0119\u015B\u0107 sprawdze\u0144 konfiguracji wymaga HA OS lub HA Supervised (aktualizacje systemu, skanowanie dodatk\u00F3w, analiza sieci).' : 'Some configuration checks require HA OS or Supervised installation (system updates, addon scanning, network analysis).', fix: L ? 'Zainstaluj Home Assistant OS dla pe\u0142nego zakresu audytu' : 'Install HA OS for full configuration audit coverage' });
       }
 
       if (coreInfo) {
@@ -855,7 +883,7 @@ class HASecurityCheck extends HTMLElement {
       try {
         const addonList = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' });
         addons = addonList?.addons || addonList?.data?.addons || [];
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       const installedAddons = addons.filter(a => a.installed);
 
@@ -898,7 +926,7 @@ class HASecurityCheck extends HTMLElement {
         findings.pass.push({ id: 'ssl_internal', title: 'Internal access uses HTTPS', desc: `Internal URL: ${internalUrl}` });
       }
 
-      // K1: Certificate & DNS security checks
+      // K1: Certificate & DNS best-practice checks
       if (externalUrl && externalUrl.startsWith('https://')) {
         try {
           const hostname = new URL(externalUrl).hostname;
@@ -907,7 +935,7 @@ class HASecurityCheck extends HTMLElement {
           } else {
             findings.info.push({ id: 'ssl_cert_check', title: 'Verify SSL certificate expiry', desc: `Hostname: ${hostname} — ensure your cert is auto-renewed (Let''s Encrypt, Cloudflare, etc.)`, fix: 'Use certbot with auto-renewal or a Cloudflare tunnel for hassle-free SSL' });
           }
-        } catch(e) { console.debug('[security-check]', e.message); }
+        } catch(e) { console.debug('[config-auditor]', e.message); }
       }
 
       // DNS rebinding protection
@@ -917,14 +945,14 @@ class HASecurityCheck extends HTMLElement {
         if (!hasCors) {
           findings.pass.push({ id: 'dns_rebind', title: 'No CORS component detected', desc: 'Lower risk of DNS rebinding attacks' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
 
       let users = [];
       try {
         const userList = await this._hass.callWS({ type: 'config/auth/list' });
         users = userList || [];
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       if (users.length > 0) {
         const activeUsers = users.filter(u => u.is_active !== false);
@@ -992,7 +1020,7 @@ class HASecurityCheck extends HTMLElement {
         } else if (llat && llat.length > 0) {
           findings.info.push({ id: 'access_tokens', title: `${llat.length} long-lived access token(s)`, desc: 'Review periodically for unused tokens' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // Camera exposure check
       const cameraEntities = allEntities.filter(e => e.startsWith('camera.'));
@@ -1015,20 +1043,20 @@ class HASecurityCheck extends HTMLElement {
             findings.info.push({ id: 'hacs_custom_repos', title: `${customRepos.length} custom HACS repository(ies) installed`, desc: customRepos.slice(0, 3).map(r => r.repository || r).join(', ') + (customRepos.length > 3 ? '...' : ''), fix: 'Review custom repositories for trust and source quality' });
           }
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Trusted networks / Auth providers
       try {
         const authProviders = this._hass.config?.auth_providers || [];
         const hasTrustedNetworks = authProviders.some(ap => ap.type === 'trusted_networks');
         if (hasTrustedNetworks) {
-          findings.warning.push({ id: 'trusted_networks', title: 'Trusted networks auth provider enabled', desc: 'This reduces security by allowing local network access without authentication', fix: 'Disable trusted_networks or use only on fully isolated private networks' });
+          findings.warning.push({ id: 'trusted_networks', title: 'Trusted networks auth provider enabled', desc: 'This weakens the auth model by allowing local network access without authentication', fix: 'Disable trusted_networks or use only on fully isolated private networks' });
         }
         const hasLegacyApiPassword = authProviders.some(ap => ap.type === 'legacy_api_password');
         if (hasLegacyApiPassword) {
           findings.critical.push({ id: 'legacy_api_password', title: 'Legacy API password enabled', desc: 'Legacy API passwords are deprecated and less secure than long-lived access tokens', fix: 'Remove api_password from configuration.yaml and use long-lived access tokens instead' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: IP bans
       try {
@@ -1036,7 +1064,7 @@ class HASecurityCheck extends HTMLElement {
         if (banData?.banned_ips && banData.banned_ips.length > 0) {
           findings.info.push({ id: 'ip_bans', title: `${banData.banned_ips.length} IP(s) are banned`, desc: 'Failed login attempts have resulted in IP bans', fix: 'Review failed login attempts in the System Log' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: HTTP configuration
       try {
@@ -1052,7 +1080,7 @@ class HASecurityCheck extends HTMLElement {
             findings.warning.push({ id: 'x_forwarded_for_unprotected', title: 'X-Forwarded-For enabled without trusted proxies', desc: 'This can allow IP spoofing if not behind a trusted proxy', fix: 'Either set trusted_proxies or disable use_x_forwarded_for' });
           }
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Privileged addons
       try {
@@ -1060,7 +1088,7 @@ class HASecurityCheck extends HTMLElement {
         if (privilegedAddons.length > 0) {
           findings.warning.push({ id: 'privileged_addons', title: `${privilegedAddons.length} addon(s) with privileged access`, desc: privilegedAddons.map(a => this._sanitize(a.name)).join(', '), fix: 'Privileged addons have root-level access. Verify they are trustworthy and necessary.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Exposed addon ports
       try {
@@ -1076,7 +1104,7 @@ class HASecurityCheck extends HTMLElement {
           }).join('; ');
           findings.info.push({ id: 'exposed_addon_ports', title: `${exposedAddons.length} addon(s) expose port(s)`, desc: portList, fix: 'Ensure exposed ports are not accessible from the internet. Use firewall rules if needed.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Ingress vs exposed addons
       try {
@@ -1084,7 +1112,7 @@ class HASecurityCheck extends HTMLElement {
         if (nonIngressAddons.length > 0) {
           findings.info.push({ id: 'non_ingress_addons', title: `${nonIngressAddons.length} addon(s) not using Ingress`, desc: nonIngressAddons.map(a => this._sanitize(a.name)).join(', '), fix: 'Consider using Ingress for safer addon access (only through HA UI)' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Webhooks
       try {
@@ -1099,7 +1127,7 @@ class HASecurityCheck extends HTMLElement {
         if (webhookCount > 0) {
           findings.info.push({ id: 'webhooks', title: `${webhookCount} automation(s)/script(s) with webhook(s)`, desc: 'Webhooks expose endpoints that can be triggered from the internet', fix: 'Ensure webhook URLs are not shared publicly. Use strong secrets in webhook URLs.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Long-lived access tokens
       try {
@@ -1107,7 +1135,7 @@ class HASecurityCheck extends HTMLElement {
         if (tokenCount > 0) {
           findings.info.push({ id: 'access_tokens', title: `${tokenCount} user(s) with long-lived access token(s)`, desc: 'Access tokens should be rotated regularly and kept secure', fix: 'Rotate tokens periodically. Remove unused tokens from Settings \u2192 Users' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Camera entities
       try {
@@ -1115,7 +1143,7 @@ class HASecurityCheck extends HTMLElement {
         if (cameraEntities.length > 0) {
           findings.info.push({ id: 'camera_count', title: `${cameraEntities.length} camera(s) configured`, desc: 'Camera streams should not be exposed directly to the internet', fix: 'Use Secure (SSL/TLS) connection. Do not expose camera ports directly. Use Nabu Casa or tunnel.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Media source / proxy exposure
       try {
@@ -1123,7 +1151,7 @@ class HASecurityCheck extends HTMLElement {
         if (mediaEntities.length > 0) {
           findings.info.push({ id: 'media_exposure', title: `${mediaEntities.length} media player(s) configured`, desc: 'Ensure media sources are not serving public content', fix: 'Use local media libraries. Do not expose media over the internet unless necessary.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Recorder / history purge settings
       try {
@@ -1135,17 +1163,17 @@ class HASecurityCheck extends HTMLElement {
             findings.info.push({ id: 'recorder_retention', title: `Recorder keeping data for ${purgeKeepDays} days`, desc: 'Long retention can be a privacy concern if you have guests or visitors', fix: 'Consider reducing purge_keep_days in configuration.yaml if privacy is a concern' });
           }
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      // NEW CHECK: Supervisor security (debug mode)
+      // NEW CHECK: Supervisor debug mode
       try {
         if (supervisorInfo?.debug === true) {
-          findings.warning.push({ id: 'supervisor_debug', title: 'Supervisor debug mode is enabled', desc: 'Debug mode exposes additional logs and may reduce security', fix: 'Disable debug mode in Supervisor settings unless troubleshooting' });
+          findings.warning.push({ id: 'supervisor_debug', title: 'Supervisor debug mode is enabled', desc: 'Debug mode exposes additional logs and should not stay enabled outside troubleshooting', fix: 'Disable debug mode in Supervisor settings unless troubleshooting' });
         }
         if (supervisorInfo?.debug_block === true) {
           findings.info.push({ id: 'supervisor_debug_block', title: 'Supervisor debug block is enabled', desc: 'This is a development/testing feature', fix: 'Ensure this is intentional and not left enabled in production' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: HACS addon integrity
       try {
@@ -1157,7 +1185,7 @@ class HASecurityCheck extends HTMLElement {
             findings.pass.push({ id: 'hacs_update', title: 'HACS addon is up to date', desc: `Version: ${hacsAddon.version}` });
           }
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Bluetooth / USB exposure in addons
       try {
@@ -1168,14 +1196,14 @@ class HASecurityCheck extends HTMLElement {
         if (btUsbAddons.length > 0) {
           findings.info.push({ id: 'bt_usb_addons', title: `${btUsbAddons.length} addon(s) with Bluetooth/USB access`, desc: btUsbAddons.map(a => this._sanitize(a.name)).join(', '), fix: 'Verify that these addons are trustworthy. USB/Bluetooth access provides direct hardware access.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Firewall / Network isolation
       try {
         if (hostInfo?.chassis && hostInfo.chassis !== 'embedded') {
-          findings.warning.push({ id: 'non_haos', title: 'Running on non-HAOS system', desc: `Detected chassis: ${hostInfo.chassis}. Missing Supervisor network isolation.`, fix: 'Use Home Assistant OS for built-in network security features. Manual firewall configuration required on generic Linux.' });
+          findings.warning.push({ id: 'non_haos', title: 'Running on non-HAOS system', desc: `Detected chassis: ${hostInfo.chassis}. Missing Supervisor network isolation.`, fix: 'Use Home Assistant OS for built-in network isolation features. Manual firewall configuration is required on generic Linux.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Backup encryption
       try {
@@ -1187,7 +1215,7 @@ class HASecurityCheck extends HTMLElement {
             findings.warning.push({ id: 'unencrypted_backups', title: `${unencryptedBackups.length} backup(s) without encryption`, desc: 'Unencrypted backups expose sensitive data', fix: 'Create new backups with a password. Set a backup password in Settings \u2192 System \u2192 Backups' });
           }
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: MQTT anonymous access
       try {
@@ -1205,15 +1233,15 @@ class HASecurityCheck extends HTMLElement {
             findings.info.push({ id: 'mqtt_config', title: 'Could not verify MQTT configuration', desc: 'Unable to read Mosquitto addon settings', fix: 'Manually verify MQTT authentication settings' });
           }
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Dangerous template sensors
       try {
         const templateEntities = allEntities.filter(e => e.includes('template') || e.includes('command_line'));
         if (templateEntities.length > 10) {
-          findings.info.push({ id: 'template_sensors', title: `${templateEntities.length} template/command_line entities`, desc: 'Large number of template entities may indicate complex configs that need review', fix: 'Periodically review template sensors for security implications' });
+          findings.info.push({ id: 'template_sensors', title: `${templateEntities.length} template/command_line entities`, desc: 'Large number of template entities may indicate complex configs that need review', fix: 'Periodically review template sensors for unintended access or command execution paths' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: HTTP configuration (CORS)
       try {
@@ -1221,7 +1249,7 @@ class HASecurityCheck extends HTMLElement {
         if (httpConfig?.components?.includes('cors') || httpConfig?.allowlist_external_urls?.length > 0) {
           findings.info.push({ id: 'cors_config', title: 'CORS or external URL allowlist configured', desc: 'Cross-origin requests or external URLs are permitted', fix: 'Review allowed origins and URLs to ensure they are trusted' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Port 8123 direct exposure
       try {
@@ -1229,7 +1257,7 @@ class HASecurityCheck extends HTMLElement {
         if (externalUrl && externalUrl.includes(':8123')) {
           findings.warning.push({ id: 'port_exposure', title: 'Default port 8123 exposed externally', desc: `External URL uses default HA port: ${externalUrl}`, fix: 'Use a reverse proxy (NGINX, Caddy) or Nabu Casa instead of direct port forwarding. Change default port if exposing directly.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Person tracking entities
       try {
@@ -1237,25 +1265,20 @@ class HASecurityCheck extends HTMLElement {
         if (personEntities.length > 0) {
           findings.info.push({ id: 'person_tracking', title: `${personEntities.length} person(s) tracked`, desc: 'Location data is sensitive PII', fix: 'Ensure only trusted users have access to person entities. Review recorder include/exclude.' });
         }
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
       const critCount = findings.critical.length;
       const warnCount = findings.warning.length;
       const passCount = findings.pass.length;
       const infoCount = findings.info.length;
       const totalChecks = critCount + warnCount + passCount + infoCount;
-      let score = 100;
-      score -= critCount * 15;
-      score -= warnCount * 5;
-      score -= infoCount * 0.5;
-      score = Math.max(0, Math.min(100, score));
 
       // Fetch network interfaces from Supervisor API
       let networkInfo = [];
       try {
         const netResp = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/network/info', method: 'get' });
         networkInfo = netResp?.interfaces || netResp?.data?.interfaces || [];
-      } catch(ne) { console.debug('[ha-security-check] caught:', e); }
+      } catch(ne) { console.debug('[ha-config-auditor] caught:', ne); }
       if (networkInfo.length === 0) {
         try {
           const netWS = await this._hass.callWS({ type: 'network' });
@@ -1266,26 +1289,26 @@ class HASecurityCheck extends HTMLElement {
               ipv4: { address: a.ipv4 ? a.ipv4.map(ip => ip.address + '/' + ip.network_prefix) : [], method: a.auto ? 'auto' : 'manual', gateway: null, nameservers: [] }
             }));
           }
-        } catch(ne2) { console.debug('[ha-security-check] caught:', e); }
+        } catch(ne2) { console.debug('[ha-config-auditor] caught:', ne2); }
       }
       try {
         const infoResp = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/info', method: 'get' });
         hostInfo = infoResp || null;
-      } catch(ne3) { console.debug('[ha-security-check] caught:', e); }
+      } catch(ne3) { console.debug('[ha-config-auditor] caught:', ne3); }
 
       // Fetch config entries (integrations)
       let cfgEntries = [];
       try {
         const entries = await this._hass.callWS({type: 'config_entries/list'});
         cfgEntries = entries || [];
-      } catch(e) { console.debug('[security-check]', e.message); }
+      } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      this._auditData = { findings, score, critCount, warnCount, passCount, infoCount, totalChecks, users, addons: installedAddons, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
+      this._auditData = { findings, critCount, warnCount, passCount, infoCount, totalChecks, users, addons: installedAddons, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
     this._saveScanData();
 
     } catch(e) {
-      console.error('[Security Check] Error:', e);
+      console.error('[Config Auditor] Error:', e);
       this._auditData = { error: e.message };
     }
 
@@ -1812,13 +1835,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 .storage-bar, .usage-bar { width: 100%; height: 24px; background: var(--bento-border); border-radius: var(--bento-radius-xs); overflow: hidden; margin-bottom: 12px; }
 .storage-fill, .usage-fill { height: 100%; border-radius: var(--bento-radius-xs); transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); background: var(--bento-primary); }
 
-.check-item, .security-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--bento-border); transition: var(--bento-transition); }
-.check-item:hover, .security-item:hover { background: rgba(59, 130, 246, 0.03); }
+.check-item, .audit-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--bento-border); transition: var(--bento-transition); }
+.check-item:hover, .audit-item:hover { background: rgba(59, 130, 246, 0.03); }
 .check-icon { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 16px; }
 .check-icon.pass { background: rgba(16, 185, 129, 0.1); }
 .check-icon.fail { background: rgba(239, 68, 68, 0.1); }
 .check-icon.warn { background: rgba(245, 158, 11, 0.1); }
-.check-text, .security-text { flex: 1; }
+.check-text, .audit-text { flex: 1; }
 .check-title { font-weight: 600; font-size: 13px; color: var(--bento-text); }
 .check-desc { font-size: 12px; color: var(--bento-text-secondary); margin-top: 2px; }
 
@@ -1856,24 +1879,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   .panels { flex-direction: column; }
   .board { flex-direction: column; }
   .column { min-width: unset; }
-  .score-section { gap: 16px; flex-wrap: wrap; }
-  .score-ring { width: 100px; height: 100px; }
-  .score-ring svg { width: 100px; height: 100px; }
-  .score-num { font-size: 22px; }
-  .score-summary h3 { font-size: 13px; }
+  .audit-summary-section { gap: 16px; }
 }
 
-/* ===== SECURITY CHECK SPECIFIC ===== */
-.score-section { display: flex; align-items: center; gap: 24px; margin-bottom: 20px; padding: 16px; background: var(--bento-bg); border-radius: var(--bento-radius-sm); border: 1px solid var(--bento-border); }
-.score-ring { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
-.score-ring svg { width: 120px; height: 120px; transform: rotate(-90deg); }
-.score-bg { fill: none; stroke: var(--bento-border); stroke-width: 8; }
-.score-fill { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dasharray 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-.score-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
-.score-num { font-size: 28px; font-weight: 700; font-family: 'Inter', sans-serif; line-height: 1.2; }
-.score-label { font-size: 11px; color: var(--bento-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-.score-summary { flex: 1; }
-.score-summary h3 { margin: 0 0 12px 0; font-size: 15px; font-weight: 600; }
+/* ===== CONFIG AUDITOR SPECIFIC ===== */
+.audit-summary-section { margin-bottom: 20px; padding: 16px; background: var(--bento-bg); border-radius: var(--bento-radius-sm); border: 1px solid var(--bento-border); }
+.audit-summary-section h3 { margin: 0 0 6px 0; font-size: 15px; font-weight: 600; color: var(--bento-text); }
+.audit-summary-section p { margin: 0 0 12px 0; font-size: 12px; color: var(--bento-text-secondary); line-height: 1.5; }
 .summary-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; color: var(--bento-text-secondary); }
 .summary-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .summary-count { font-weight: 700; color: var(--bento-text); min-width: 20px; }
@@ -1930,10 +1942,6 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
           .tab, .tab-btn, .tab-btn { padding: 5px 8px; font-size: 11px; }
           .stats, .stats-grid, .summary-grid, .stat-cards, .kpi-grid, .metrics-grid { grid-template-columns: 1fr 1fr; }
           .stat-val, .kpi-val, .metric-val { font-size: 16px; }
-          .score-section { flex-direction: column; align-items: center; text-align: center; }
-          .score-ring { width: 90px; height: 90px; }
-          .score-ring svg { width: 90px; height: 90px; }
-          .score-num { font-size: 20px; }
           .summary-row { justify-content: center; }
         }
       
@@ -1973,27 +1981,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       });
     });
 
-    // Score explainer toggle listener
-    const toggle = this.shadowRoot.querySelector('.score-explainer-toggle');
-    if (toggle) {
-      toggle.addEventListener('click', () => {
-        const body = this.shadowRoot.querySelector('.score-explainer-body');
-        const arrow = this.shadowRoot.querySelector('.score-explainer-arrow');
-        if (body) {
-          const isHidden = body.style.display === 'none';
-          body.style.display = isHidden ? 'block' : 'none';
-          if (arrow) arrow.style.transform = isHidden ? 'rotate(180deg)' : '';
-        }
-      });
-    }
-
     // Refresh now handled by panel toolbar (removed internal Re-scan button)
   }
 
   _updateContent() {
     const content = this.shadowRoot.getElementById('content');
     if (!content) return;
-    if (this._loading) { content.innerHTML = '<div class="loading"><div class="spinner"></div>Running security audit...</div>'; return; }
+    if (this._loading) { content.innerHTML = '<div class="loading"><div class="spinner"></div>Running configuration best-practices audit...</div>'; return; }
     if (!this._auditData || this._auditData.error) { content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._auditData?.error || 'Audit failed')}</div>`; return; }
     const d = this._auditData;
     switch (this._activeTab) {
@@ -2007,45 +2001,29 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   _renderOverview(d) {
-    const circ = 2 * Math.PI * 42;
-    const sc = d.score;
-    const scoreColor = sc >= 80 ? '#4caf50' : sc >= 60 ? '#ff9800' : '#f44336';
-    const grade = sc >= 90 ? 'A' : sc >= 80 ? 'B' : sc >= 70 ? 'C' : sc >= 60 ? 'D' : 'F';
-    const gradeMsg = sc >= 90 ? 'Excellent security posture' : sc >= 80 ? 'Good, minor improvements possible' : sc >= 60 ? 'Fair, several issues to address' : 'Needs attention \u2014 critical issues found';
-    let html = `<div class="score-section"><div class="score-ring"><svg viewBox="0 0 100 100"><circle class="score-bg" cx="50" cy="50" r="42" /><circle class="score-fill" cx="50" cy="50" r="42" style="stroke:${scoreColor};stroke-dasharray:${(sc/100)*circ} ${circ}" /></svg><div class="score-text"><div class="score-num" style="color:${scoreColor}">${sc}</div><div class="score-label">Score</div></div></div><div class="score-summary"><h3>Grade: ${grade} \u2014 ${gradeMsg}</h3><div class="summary-row"><div class="summary-dot" style="background:#f44336"></div><span class="summary-count">${d.critCount}</span> Critical</div><div class="summary-row"><div class="summary-dot" style="background:#ff9800"></div><span class="summary-count">${d.warnCount}</span> Warnings</div><div class="summary-row"><div class="summary-dot" style="background:#03a9f4"></div><span class="summary-count">${d.infoCount}</span> Info</div><div class="summary-row"><div class="summary-dot" style="background:#4caf50"></div><span class="summary-count">${d.passCount}</span> Passed</div></div></div>`;
+    let html = `<div class="audit-summary-section">
+      <h3>Configuration best-practice summary</h3>
+      <p>${d.totalChecks} checks run. Review failed and warning items first, then informational findings.</p>
+      <div class="summary-grid">
+        <div class="stat-card"><div class="stat-value" style="color:#f44336">${d.critCount}</div><div class="stat-label">Failed</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#ff9800">${d.warnCount}</div><div class="stat-label">Warnings</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#4caf50">${d.passCount}</div><div class="stat-label">Passed</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#03a9f4">${d.infoCount}</div><div class="stat-label">Info</div></div>
+      </div>
+    </div>`;
     const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
     const addonsDisplay = noSupervisor && d.addons.length === 0 ? 'N/A' : String(d.addons.length);
     const integrationsDisplay = d.integrations?.length || 0;
     html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${noSupervisor && d.addons.length === 0 ? 'Addons (HA OS only)' : 'Addons installed'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Integrations</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.users.length}</div><div style="font-size:11px;color:var(--bento-text-secondary)">User accounts</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
-    if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Critical Issues</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
+    if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
     if (d.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
-    // Scoring methodology explanation - collapsible
-    const scoringL = this._lang === 'pl';
-    html += `<div style="margin-top:16px;padding:14px;background:var(--bento-bg);border:1px solid var(--bento-border);border-radius:var(--bento-radius-sm);">
-      <div class="score-explainer-toggle" style="font-size:13px;font-weight:600;color:var(--bento-text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-        <span>${scoringL ? '\u{1F4CA} Jak obliczany jest wynik?' : '\u{1F4CA} How is the score calculated?'}</span>
-        <span class="score-explainer-arrow" style="transition:transform 0.2s;font-size:12px;">\u25BC</span>
-      </div>
-      <div class="score-explainer-body" style="display:none;margin-top:8px;">
-        <div style="font-size:12px;color:var(--bento-text-secondary);line-height:1.6;">
-          ${scoringL ? 'Wynik startowy: <b>100 punkt\u00F3w</b>' : 'Starting score: <b>100 points</b>'}<br>
-          \u{1F6A8} ${scoringL ? 'Krytyczne' : 'Critical'}: <b>-15 ${scoringL ? 'pkt za ka\u017Cdy' : 'pts each'}</b> (${scoringL ? 'np. brak SSL, wy\u0142\u0105czona ochrona addon' : 'e.g. no SSL, disabled addon protection'})<br>
-          \u26A0\uFE0F ${scoringL ? 'Ostrze\u017Cenia' : 'Warnings'}: <b>-5 ${scoringL ? 'pkt za ka\u017Cde' : 'pts each'}</b> (${scoringL ? 'np. nieaktualne addony, wiele kont Owner' : 'e.g. outdated addons, multiple owner accounts'})<br>
-          \u2139\uFE0F Info: <b>-0.5 ${scoringL ? 'pkt za ka\u017Cde' : 'pts each'}</b> (${scoringL ? 'np. shell commands, MQTT' : 'e.g. shell commands, MQTT broker'})<br>
-          \u2705 ${scoringL ? 'Spe\u0142nione' : 'Passed'}: ${scoringL ? 'bez kary' : 'no penalty'}
-        </div>
-        <div style="font-size:12px;color:var(--bento-text-secondary);margin-top:8px;">
-          ${scoringL ? '<b>Sprawdzane:</b> aktualizacje Core/OS/Supervisor, SSL/HTTPS, ochrona addon\u00F3w, auto-update, host networking, u\u017Cytkownicy i uprawnienia, SSH/MQTT/FTP/Samba, trusted networks, legacy API password, IP bans, HACS repos, DNS rebinding, CORS' : '<b>Checks:</b> Core/OS/Supervisor updates, SSL/HTTPS, addon protection, auto-update, host networking, users & permissions, SSH/MQTT/FTP/Samba, trusted networks, legacy API password, IP bans, HACS repos, DNS rebinding, CORS'}
-        </div>
-      </div>
-    </div>`;
     if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString()}</div>`; }
     return html;
   }
 
   _renderFindings(d) {
     let html = '';
-    if (d.findings.critical.length) { html += '<div class="section-title">\u{1F6A8} Critical</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
+    if (d.findings.critical.length) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
     if (d.findings.warning.length) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
     if (d.findings.info.length) { html += '<div class="section-title">\u2139\uFE0F Informational</div>'; d.findings.info.forEach(f => { html += this._renderFinding(f, 'info'); }); }
     if (d.findings.pass.length) { html += '<div class="section-title">\u2705 Passed</div>'; d.findings.pass.forEach(f => { html += this._renderFinding(f, 'pass'); }); }
@@ -2055,7 +2033,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 
   _renderFinding(f, severity) {
     const icons = { critical: '\u{1F6A8}', warning: '\u26A0\uFE0F', info: '\u2139\uFE0F', pass: '\u2705' };
-    const labels = { critical: 'Critical', warning: 'Warning', info: 'Info', pass: 'Pass' };
+    const labels = { critical: 'Failed', warning: 'Warning', info: 'Info', pass: 'Pass' };
     return `<div class="finding ${severity}"><div class="finding-header"><span class="finding-icon">${icons[severity]}</span><span class="finding-title">${f.title}</span><span class="finding-badge badge-${severity}">${labels[severity]}</span></div><div class="finding-desc">${f.desc}</div>${f.fix ? `<div class="finding-fix">\u{1F4A1} ${f.fix}</div>` : ''}</div>`;
   }
 
@@ -2296,17 +2274,17 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 }
 
-if (!customElements.get('ha-security-check')) {
-  customElements.define('ha-security-check', HASecurityCheck);
+if (!customElements.get('ha-config-auditor')) {
+  customElements.define('ha-config-auditor', HAConfigAuditor);
 }
 
 console.info(
-  '%c  HA-SECURITY-CHECK  %c v1.0.0 ',
+  '%c  HA-CONFIG-AUDITOR  %c v1.0.0 ',
   'background: #f44336; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #ffebee; color: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
 
-class HaSecurityCheckEditor extends HTMLElement {
+class HaConfigAuditorEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -2327,10 +2305,10 @@ class HaSecurityCheckEditor extends HTMLElement {
             input { outline:none; transition:border-color .2s; }
             input:focus { border-color:var(--bento-primary, var(--primary-color,#3b82f6)); }
         </style>
-      <h3>Security Check</h3>
+      <h3>Config Auditor</h3>
             <div style="margin-bottom:12px;">
               <label style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;">Title</label>
-              <input type="text" id="cf_title" value="${_esc(this._config?.title || 'Security Check')}"
+              <input type="text" id="cf_title" value="${_esc(this._config?.title || 'Config Auditor')}"
                 style="width:100%;padding:8px 12px;border:1px solid var(--divider-color,#e2e8f0);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#1e293b);font-size:14px;box-sizing:border-box;">
             </div>
     `;
@@ -2342,9 +2320,9 @@ class HaSecurityCheckEditor extends HTMLElement {
   }
   connectedCallback() { this._render(); }
 }
-if (!customElements.get('ha-security-check-editor')) { customElements.define('ha-security-check-editor', HaSecurityCheckEditor); }
+if (!customElements.get('ha-config-auditor-editor')) { customElements.define('ha-config-auditor-editor', HaConfigAuditorEditor); }
 
 })();
 
 window.customCards = window.customCards || [];
-window.customCards.push({ type: 'ha-security-check', name: 'Security Check', description: 'Security audit tool for Home Assistant', preview: true });
+window.customCards.push({ type: 'ha-config-auditor', name: 'Config Auditor', description: 'Configuration best-practices audit tool for Home Assistant', preview: true });
