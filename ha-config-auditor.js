@@ -1,4 +1,4 @@
-/* HA Tools split — ha-config-auditor v5.0.1 (2026-06-12) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v5.0.2 (2026-06-12) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -19,6 +19,8 @@ if (typeof window !== 'undefined' && !window.HAToolsBentoCSS) {
    HA Tools — Bento Design System v2.0 (Premium)
    ═══════════════════════════════════════════════ */
 
+/* keyboard a11y */
+:focus-visible { outline: 2px solid var(--bento-primary, #6366f1); outline-offset: 2px; border-radius: 3px; }
 
 :host {
   /* Brand palette — diamond top, gradient-friendly */
@@ -1969,13 +1971,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
             <h2>${_esc(this._config.title || '')}</h2>
             <!-- Refresh handled by panel toolbar -->
           </div>
-          <div class="tabs">
-            <button class="tab-button ${this._activeTab === 'overview' ? 'active' : ''}" data-tab="overview">Overview</button>
-            <button class="tab-button ${this._activeTab === 'critical' ? 'active' : ''}" data-tab="critical">Findings</button>
-            <button class="tab-button ${this._activeTab === 'addons' ? 'active' : ''}" data-tab="addons">Addons & Integrations</button>
-            <button class="tab-button ${this._activeTab === 'network' ? 'active' : ''}" data-tab="network">Network</button>
-            <button class="tab-button ${this._activeTab === 'users' ? 'active' : ''}" data-tab="users">Users</button>
-            <button class="tab-button ${this._activeTab === 'tips' ? 'active' : ''}" data-tab="tips">Tips</button>
+          <div class="tabs" role="tablist">
+            <button class="tab-button ${this._activeTab === 'overview' ? 'active' : ''}" data-tab="overview" role="tab" aria-selected="${this._activeTab === 'overview'}">Overview</button>
+            <button class="tab-button ${this._activeTab === 'critical' ? 'active' : ''}" data-tab="critical" role="tab" aria-selected="${this._activeTab === 'critical'}">Findings</button>
+            <button class="tab-button ${this._activeTab === 'addons' ? 'active' : ''}" data-tab="addons" role="tab" aria-selected="${this._activeTab === 'addons'}">Addons & Integrations</button>
+            <button class="tab-button ${this._activeTab === 'network' ? 'active' : ''}" data-tab="network" role="tab" aria-selected="${this._activeTab === 'network'}">Network</button>
+            <button class="tab-button ${this._activeTab === 'users' ? 'active' : ''}" data-tab="users" role="tab" aria-selected="${this._activeTab === 'users'}">Users</button>
+            <button class="tab-button ${this._activeTab === 'tips' ? 'active' : ''}" data-tab="tips" role="tab" aria-selected="${this._activeTab === 'tips'}">Tips</button>
           </div>
           <div id="content"></div>
         
@@ -2295,7 +2297,7 @@ if (!customElements.get('ha-config-auditor')) {
 }
 
 console.info(
-  '%c  HA-CONFIG-AUDITOR  %c v5.0.1 ',
+  '%c  HA-CONFIG-AUDITOR  %c v5.0.2 ',
   'background: #f44336; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #ffebee; color: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
