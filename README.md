@@ -4,7 +4,7 @@
 
 Configuration best-practices checker for Home Assistant — reviews tokens, exposure and integration hygiene, and reports passed / warning / failed checks with actionable tips. It is a heuristic, client-side review aid, not a security scanner.
 
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/badge/Version-5.0.0-success.svg)](#changelog)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?logo=homeassistant)](https://www.home-assistant.io/) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Version](https://img.shields.io/github/v/release/MacSiem/ha-config-auditor)](https://github.com/MacSiem/ha-config-auditor/releases)
 
 > Part of the [HA Tools](https://github.com/MacSiem) ecosystem — split into individual HACS-installable plugins.
 
