@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CA screenshot harness</title>
+<style>
+  html, body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body.light { background: #f4f5f7; }
+  body.light ha-config-auditor { --card-background-color: #ffffff; --primary-background-color: #f4f5f7; }
+  body.dark { background: #111318; }
+  body.dark ha-config-auditor { --card-background-color: #1c1e26; --primary-background-color: #111318; }
+  ha-config-auditor { display: block; width: 480px; }
+</style>
+</head>
+<body>
+<ha-config-auditor id="card"></ha-config-auditor>
+<script>
+  try { localStorage.setItem('ha-intro-dismissed-ha-config-auditor', '1'); } catch (e) {}
+</script>
+<script src="../../ha-config-auditor.js"></script>
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const theme = params.get('theme') === 'dark' ? 'dark' : 'light';
+  const tab = params.get('tab') || '';
+  document.body.className = theme;
+  const now = Date.now(); const h = 3600000;
+
+  // -- Add-ons (Supervisor /addons) --
+  const addons = [
+    { slug: 'core_mosquitto', name: 'Mosquitto broker', version: '6.4.1', version_latest: '6.4.1', installed: true, state: 'started', protected: true, auto_update: true, host_network: false, ingress: false, privileged: false, devices: [], ports: { '1883/tcp': { host_port: 1883 } }, update_available: false },
+    { slug: 'core_ssh', name: 'Terminal & SSH', version: '9.14.0', version_latest: '9.15.0', installed: true, state: 'started', protected: true, auto_update: false, host_network: true, ingress: false, privileged: false, devices: [], ports: { '22/tcp': { host_port: 22222 } }, update_available: true },
+    { slug: 'hacs', name: 'HACS', version: '2.0.5', version_latest: '2.0.5', installed: true, state: 'started', protected: false, auto_update: true, host_network: false, ingress: true, privileged: false, devices: [], ports: {}, update_available: false },
+    { slug: 'core_samba', name: 'Samba share', version: '12.3.1', version_latest: '12.3.1', installed: true, state: 'started', protected: true, auto_update: false, host_network: false, ingress: false, privileged: false, devices: [], ports: { '445/tcp': { host_port: 445 } }, update_available: false },
+  ];
+
+  // -- Users (config/auth/list) --
+  const users = [
+    { id: 'u1', name: 'Alex', is_owner: true, is_active: true, local_only: false, group_ids: ['system-admin'], system_generated: false, refresh_tokens: [{ id: 'rt1' }] },
+    { id: 'u2', name: 'Backup Admin', is_owner: true, is_active: true, local_only: false, group_ids: ['system-admin'], system_generated: false, refresh_tokens: [] },
+    { id: 'u3', name: 'Guest', is_owner: false, is_active: true, local_only: true, group_ids: ['system-users'], system_generated: false, refresh_tokens: [] },
+  ];
+
+  // -- Integrations (config_entries/list) --
+  const configEntries = [
+    { title: 'Philips Hue', domain: 'hue', source: 'user', state: 'loaded' },
+    { title: 'Met.no Weather', domain: 'met', source: 'user', state: 'loaded' },
+    { title: 'Mobile App', domain: 'mobile_app', source: 'user', state: 'loaded' },
+    { title: 'Google Cast', domain: 'cast', source: 'user', state: 'loaded' },
+    { title: 'Frigate', domain: 'frigate', source: 'hacs', state: 'loaded' },
+    { title: 'Xiaomi Miio', domain: 'xiaomi_miio', source: 'hacs', state: 'setup_error' },
+    { title: 'Spotify', domain: 'spotify', source: 'user', state: 'loaded' },
+    { title: 'Nest', domain: 'nest', source: 'user', state: 'not_loaded' },
+  ];
+
+  // -- States (entity scans: cameras, person, shell_command, automations/scripts, HACS repos, media_player) --
+  const ent = (eid, name, state, attrs) => ({
+    entity_id: eid, state, attributes: Object.assign({ friendly_name: name }, attrs || {}),
+    last_changed: new Date(now - 2 * h).toISOString(), last_updated: new Date(now - 2 * h).toISOString(),
+  });
+  const list = [
+    ent('automation.morning_lights', 'Morning lights on sunrise', 'on'),
+    ent('automation.night_security', 'Night security check', 'on'),
+    ent('automation.notify_low_battery', 'Notify on low battery', 'on'),
+    ent('automation.hvac_schedule', 'HVAC schedule', 'on'),
+    ent('automation.notify_via_webhook', 'Notify via webhook', 'on', { description: 'Triggered via webhook' }),
+    ent('script.evening_routine', 'Evening routine', 'off'),
+    ent('script.vacation_mode', 'Vacation mode', 'off'),
+    ent('sensor.hacs', 'HACS', '2', { custom_repositories: [{ repository: 'hacs/integration' }, { repository: 'someuser/some-repo' }] }),
+    ent('camera.front_door', 'Front Door Camera', 'recording'),
+    ent('camera.driveway', 'Driveway Camera', 'recording'),
+    ent('media_player.living_room', 'Living Room Speaker', 'playing'),
+    ent('media_player.kitchen', 'Kitchen Speaker', 'idle'),
+    ent('person.alex', 'Alex', 'home'),
+    ent('person.partner', 'Partner', 'not_home'),
+    ent('shell_command.notify_slack', 'Notify Slack', 'unknown'),
+    ent('light.kitchen', 'Kitchen Light', 'on'),
+    ent('light.living_room', 'Living Room Light', 'off'),
+    ent('climate.thermostat', 'Thermostat', 'heat'),
+    ent('sensor.outdoor_temp', 'Outdoor Temperature', '14.2', { unit_of_measurement: '°C' }),
+    ent('binary_sensor.motion_hallway', 'Hallway Motion', 'off'),
+  ];
+  const states = {};
+  list.forEach(s => { states[s.entity_id] = s; });
+
+  const hass = {
+    language: 'en',
+    themes: { darkMode: theme === 'dark' },
+    states,
+    services: {},
+    config: {
+      location_name: 'Home',
+      version: '2024.6.0',
+      time_zone: 'Europe/Warsaw',
+      external_url: 'https://home.example.duckdns.org',
+      internal_url: 'http://192.168.1.10:8123',
+      components: ['default_config', 'automation', 'script', 'person', 'camera', 'met', 'mobile_app', 'cloud'],
+      auth_providers: [{ type: 'homeassistant' }],
+      login_attempts_threshold: 5,
+      ip_ban_enabled: true,
+      use_x_forwarded_for: false,
+      unit_system: { temperature: '°C' },
+    },
+    connection: { subscribeEvents: () => Promise.resolve(() => {}) },
+    callWS: async (msg) => {
+      const t = String(msg && msg.type || '');
+      const ep = String(msg && msg.endpoint || '');
+      if (t === 'supervisor/api') {
+        if (ep === '/host/info') return { data: { chassis: 'embedded', hostname: 'homeassistant' } };
+        if (ep === '/os/info') return { data: { version: '12.3', version_latest: '12.3', update_available: false } };
+        if (ep === '/supervisor/info') return { data: { version: '2024.06.0', version_latest: '2024.06.2', debug: false, debug_block: false } };
+        if (ep === '/core/info') return { data: { version: '2024.6.0', version_latest: '2024.6.0' } };
+        if (ep === '/addons') return { addons };
+        if (ep === '/backups') return { backups: [{ slug: 'ab12cd', name: 'Full Backup', protected: true }, { slug: 'ef34gh', name: 'Auto Backup', protected: false }] };
+        if (ep === '/network/info') {
+          return {
+            interfaces: [
+              { interface: 'eth0', type: 'ethernet', enabled: true, mac: 'AA:BB:CC:DD:EE:01', ipv4: { address: ['192.168.1.10/24'], gateway: '192.168.1.1', method: 'static', nameservers: ['1.1.1.1', '8.8.8.8'] } },
+              { interface: 'wlan0', type: 'wireless', enabled: false, mac: 'AA:BB:CC:DD:EE:02', ipv4: { address: [], gateway: null, method: 'auto', nameservers: [] }, wifi: { ssid: 'HomeWiFi', signal: 72 } },
+            ],
+          };
+        }
+        if (ep === '/info') return { hostname: 'homeassistant', operating_system: 'Home Assistant OS 12.3', supervisor: '2024.06.0' };
+        if (ep.indexOf('/addons/') === 0 && ep.indexOf('/options') > -1) return { options: { anonymous: false } };
+        return {};
+      }
+      if (t === 'config/core/info') return {};
+      if (t === 'config/auth/list') return users;
+      if (t === 'auth/long_lived_access_token/list') return [{ id: 't1' }, { id: 't2' }, { id: 't3' }];
+      if (t === 'config_entries/list') return configEntries;
+      if (t === 'network') return { adapters: [] };
+      return {};
+    },
+    callApi: async (method, path) => {
+      if (String(path).indexOf('config/ip_ban') === 0) return { banned_ips: ['203.0.113.5', '198.51.100.23'] };
+      return {};
+    },
+    callService: async () => ({}),
+  };
+
+  const card = document.getElementById('card');
+  card.setConfig({ type: 'custom:ha-config-auditor', title: 'Config Auditor' });
+  card.hass = hass;
+  setTimeout(() => { card.hass = { ...hass }; }, 400);
+  if (tab) {
+    setTimeout(() => {
+      try { card.shadowRoot.querySelector('[data-tab="' + tab + '"]').click(); } catch (e) {}
+    }, 900);
+  }
+  const scrub = () => { try { card.shadowRoot && card.shadowRoot.querySelectorAll('#tip-banner, [class*="banner"], .donate-section').forEach(n => n.remove()); } catch (e) {} };
+  setInterval(scrub, 150);
+  setTimeout(() => { scrub(); document.title = 'CA-READY'; }, 1500);
+})();
+</script>
+</body>
+</html>
