@@ -1,4 +1,4 @@
-/* HA Tools split — ha-config-auditor v5.0.3 (2026-06-12) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v5.0.4 (2026-06-12) — single-tool standalone repo */
 (function() {
 'use strict';
 
