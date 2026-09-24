@@ -1,0 +1,34 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Config Auditor is already set up.",
+      "single_instance_allowed": "Config Auditor is already set up."
+    },
+    "step": {
+      "user": {
+        "title": "Config Auditor",
+        "description": "Adds server-side configuration checks, an admin-only sidebar panel and the Config Auditor card. Nothing in your configuration is changed."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Config Auditor options",
+        "data": {
+          "show_panel": "Show the Config Auditor panel in the sidebar (administrators only)",
+          "create_repairs": "Report failed and warning checks in Settings → Repairs"
+        },
+        "data_description": {
+          "create_repairs": "Runs the checks after start-up and every 12 hours. Issues disappear once the check passes."
+        }
+      }
+    }
+  },
+  "issues": {
+    "finding": {
+      "title": "Config Auditor: {title}",
+      "description": "{detail}\n\nSuggested fix: {fix}"
+    }
+  }
+}

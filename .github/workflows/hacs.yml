@@ -15,10 +15,17 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The repository is listed as a Dashboard plugin in HACS today and ships
+        # the integration from 6.0.0; both layouts must stay valid until the
+        # HACS catalog entry moves to the integration category.
+        category: [plugin, integration]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
       - name: HACS Action
         uses: hacs/action@main
         with:
-          category: plugin
+          category: ${{ matrix.category }}

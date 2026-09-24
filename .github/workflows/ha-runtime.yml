@@ -1,0 +1,19 @@
+name: ha-runtime
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  ha-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Home Assistant test harness
+        run: pip install pytest-homeassistant-custom-component
+      - name: Integration inside a real Home Assistant core
+        run: python -m pytest tests_ha -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function -p no:cacheprovider
