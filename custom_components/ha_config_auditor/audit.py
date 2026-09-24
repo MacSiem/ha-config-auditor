@@ -194,12 +194,29 @@ async def _check_admin_mfa(hass: HomeAssistant) -> list[Finding]:
     ]
 
 
+def _remote_ui_url(hass: HomeAssistant) -> str | None:
+    """Return the Home Assistant Cloud remote UI URL when remote access is on."""
+    if "cloud" not in hass.config.components:
+        return None
+    try:
+        from homeassistant.components.cloud import async_remote_ui_url  # noqa: PLC0415
+
+        return async_remote_ui_url(hass)
+    except Exception:  # noqa: BLE001 - CloudNotAvailable or an older cloud API
+        return None
+
+
 async def _check_transport(hass: HomeAssistant) -> list[Finding]:
     api = hass.config.api
     use_ssl = bool(api and api.use_ssl)
     external = hass.config.external_url
     parsed = urlparse(external) if external else None
-    evidence = {"serves_https": use_ssl, "external_url_scheme": parsed.scheme if parsed else None}
+    remote_ui = _remote_ui_url(hass)
+    evidence = {
+        "serves_https": use_ssl,
+        "external_url_scheme": parsed.scheme if parsed else None,
+        "cloud_remote_ui": bool(remote_ui),
+    }
     if use_ssl:
         return [
             Finding(
@@ -218,6 +235,17 @@ async def _check_transport(hass: HomeAssistant) -> list[Finding]:
                 STATUS_PASS,
                 "External access uses HTTPS",
                 "The external URL uses HTTPS (TLS is terminated by a proxy or Home Assistant Cloud).",
+                category="network",
+                evidence=evidence,
+            )
+        ]
+    if remote_ui and not (parsed and parsed.scheme == "http" and not _is_local_host(parsed.hostname)):
+        return [
+            Finding(
+                "http_transport",
+                STATUS_PASS,
+                "Remote access uses Home Assistant Cloud (HTTPS)",
+                "Remote access goes through the encrypted Home Assistant Cloud connection; the local network uses plain HTTP.",
                 category="network",
                 evidence=evidence,
             )
@@ -349,8 +377,8 @@ async def _check_ip_ban(hass: HomeAssistant) -> list[Finding]:
             )
         ]
     enabled, threshold, banned = _ban_state(app)
-    exposed = bool(hass.config.external_url) or "cloud" in hass.config.components
-    evidence = {"enabled": enabled, "login_attempts_threshold": threshold, "banned_ips": banned}
+    exposed = bool(hass.config.external_url) or bool(_remote_ui_url(hass))
+    evidence = {"enabled": enabled, "login_attempts_threshold": threshold, "banned_ips": banned, "reachable_remotely": exposed}
     if enabled and threshold is not None and threshold >= 1:
         return [
             Finding(
