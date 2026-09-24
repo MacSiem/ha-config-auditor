@@ -152,7 +152,7 @@ async def test_trusted_proxies_classification(hass: HomeAssistant) -> None:
     assert (await audit._check_trusted_proxies(hass))[0].status == "pass"
 
 
-async def test_transport_classification(hass: HomeAssistant) -> None:
+async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> None:
     hass.config.api = SimpleNamespace(use_ssl=False)
     hass.config.external_url = "http://my-home.example.com:8123"
     assert (await audit._check_transport(hass))[0].status == "fail"
@@ -160,6 +160,25 @@ async def test_transport_classification(hass: HomeAssistant) -> None:
     assert (await audit._check_transport(hass))[0].status == "pass"
     hass.config.external_url = "http://192.168.1.10:8123"
     assert (await audit._check_transport(hass))[0].status == "info"
+    hass.config.external_url = None
+    monkeypatch.setattr(audit, "_remote_ui_url", lambda _hass: "https://abc.ui.nabu.casa")
+    result = (await audit._check_transport(hass))[0]
+    assert result.status == "pass" and result.evidence["cloud_remote_ui"] is True
+
+
+async def test_ip_ban_threshold_and_exposure(hass: HomeAssistant, monkeypatch) -> None:
+    from homeassistant.components.http.ban import KEY_BAN_MANAGER, KEY_LOGIN_THRESHOLD
+
+    manager = SimpleNamespace(ip_bans_lookup={"1.2.3.4": object()})
+    hass.config.external_url = None
+    monkeypatch.setattr(audit, "_remote_ui_url", lambda _hass: None)
+    hass.http = SimpleNamespace(app={KEY_BAN_MANAGER: manager, KEY_LOGIN_THRESHOLD: -1})
+    assert (await audit._check_ip_ban(hass))[0].status == "info"
+    monkeypatch.setattr(audit, "_remote_ui_url", lambda _hass: "https://abc.ui.nabu.casa")
+    assert (await audit._check_ip_ban(hass))[0].status == "warning"
+    hass.http = SimpleNamespace(app={KEY_BAN_MANAGER: manager, KEY_LOGIN_THRESHOLD: 5})
+    ok = (await audit._check_ip_ban(hass))[0]
+    assert ok.status == "pass" and ok.evidence["banned_ips"] == 1
 
 
 async def test_plaintext_secret_scan_never_returns_values(hass: HomeAssistant, tmp_path: Path) -> None:
