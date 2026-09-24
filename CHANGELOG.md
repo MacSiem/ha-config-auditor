@@ -1,3 +1,14 @@
+## 6.0.0 (2026-09-24)
+
+- New: **Config Auditor integration** (`custom_components/ha_config_auditor`). It verifies on the server what a browser card cannot read: enabled login providers (`legacy_api_password`, `trusted_networks` with or without login bypass), administrators without two-factor authentication, HTTPS, `trusted_proxies`, IP ban after failed logins, and plain-text secrets in YAML files (reported as file, line and key only; values are never returned).
+- New: admin-only **Config Auditor** sidebar panel and automatic dashboard registration of the card (a Lovelace resource in storage mode; skipped when the card is already loaded from a HACS Dashboard install). Both can be controlled in the integration options.
+- New: optional **Repairs** issues for failed and warning checks, refreshed after start-up and every 12 hours, removed once a check passes.
+- Fix: the card no longer reports browser-side guesses as results. Removed checks that could never be true or false in a browser (`config/core/info`, `config/ip_ban`, `hass.config.auth_providers`, `hass.config.login_attempts_threshold` — the last one always produced a false warning). Without the integration the card says these checks are unavailable.
+- Fix: integrations are listed again (`config_entries/get`; the previous `config_entries/list` command does not exist).
+- Server-verified findings carry a **Server-verified** badge; checks that could not run are shown as *not checked*.
+- Minimum Home Assistant version for the integration: 2025.2.0. The Dashboard plugin install keeps working.
+- New banner and brand icons (the old banner still said "Security Check").
+
 ## 5.0.6 (2026-08-28)
 
 - Isolation: Bento CSS is component-local and cannot be captured from `window.HAToolsBentoCSS` by load order.

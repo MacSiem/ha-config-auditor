@@ -1,0 +1,34 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Config Auditor jest już skonfigurowany.",
+      "single_instance_allowed": "Config Auditor jest już skonfigurowany."
+    },
+    "step": {
+      "user": {
+        "title": "Config Auditor",
+        "description": "Dodaje sprawdzenia konfiguracji po stronie serwera, panel w pasku bocznym (tylko dla administratorów) i kartę Config Auditor. Niczego w konfiguracji nie zmienia."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Config Auditor",
+        "data": {
+          "show_panel": "Pokaż panel Config Auditor w pasku bocznym (tylko administratorzy)",
+          "create_repairs": "Zgłaszaj nieudane sprawdzenia i ostrzeżenia w Ustawienia → Naprawy"
+        },
+        "data_description": {
+          "create_repairs": "Sprawdzenia uruchamiają się po starcie i co 12 godzin. Zgłoszenie znika, gdy sprawdzenie przejdzie."
+        }
+      }
+    }
+  },
+  "issues": {
+    "finding": {
+      "title": "Config Auditor: {title}",
+      "description": "{detail}\n\nSugerowana poprawka: {fix}"
+    }
+  }
+}
