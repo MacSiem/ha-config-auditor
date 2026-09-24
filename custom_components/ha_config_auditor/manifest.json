@@ -1,9 +1,20 @@
 {
   "domain": "ha_config_auditor",
   "name": "Config Auditor",
-  "codeowners": ["@MacSiem"],
+  "after_dependencies": [
+    "cloud"
+  ],
+  "codeowners": [
+    "@MacSiem"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "lovelace", "panel_custom", "websocket_api"],
+  "dependencies": [
+    "frontend",
+    "http",
+    "lovelace",
+    "panel_custom",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/MacSiem/ha-config-auditor",
   "integration_type": "service",
   "iot_class": "calculated",
