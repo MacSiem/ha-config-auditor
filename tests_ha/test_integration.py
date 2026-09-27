@@ -210,6 +210,19 @@ async def test_plaintext_secret_scan_never_returns_values(hass: HomeAssistant, t
     assert "CANARY" not in repr(result)
 
 
+async def test_plaintext_secret_scan_does_not_pass_when_file_limit_truncates(hass: HomeAssistant, tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "a.yaml").write_text("sensor: []\n", encoding="utf-8")
+    (tmp_path / "b.yaml").write_text("sensor: []\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "SCAN_MAX_FILES", 1)
+    result = audit._scan_plaintext_secrets(str(tmp_path))
+    assert result["truncated"] is True
+    assert result["complete"] is False
+    monkeypatch.setattr(hass.config, "config_dir", str(tmp_path))
+    finding = (await audit._check_plaintext_secrets(hass))[0]
+    assert finding.status == "skipped"
+    assert "incomplete" in finding.detail.lower()
+
+
 async def test_repairs_created_and_cleared(hass: HomeAssistant, monkeypatch) -> None:
     report = {
         "findings": [
