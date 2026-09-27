@@ -514,7 +514,7 @@ async def async_run_audit(hass: HomeAssistant) -> dict[str, Any]:
         try:
             findings.extend(await check(hass))
         except Exception as err:  # noqa: BLE001 - one broken check must not hide the rest
-            _LOGGER.debug("Config Auditor check %s failed", check_id, exc_info=True)
+            _LOGGER.warning("Config Auditor check %s failed (%s)", check_id, type(err).__name__)
             findings.append(
                 Finding(
                     check_id,

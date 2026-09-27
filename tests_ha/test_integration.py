@@ -253,16 +253,17 @@ async def test_repairs_created_and_cleared(hass: HomeAssistant, monkeypatch) -> 
 
 async def test_broken_check_is_reported_as_skipped(hass: HomeAssistant, monkeypatch) -> None:
     async def boom(_hass):
-        raise RuntimeError("no access")
+        raise RuntimeError("secret-CANARY")
 
     monkeypatch.setattr(audit, "CHECKS", (("auth_providers", boom),))
     report = await audit.async_run_audit(hass)
+    assert "CANARY" not in repr(report)
     assert report["findings"] == [
         {
             "id": "auth_providers",
             "status": "skipped",
             "title": "Check could not run",
-            "detail": "RuntimeError: no access",
+            "detail": "RuntimeError; check did not complete.",
             "fix": None,
             "category": "security",
             "evidence": {},
