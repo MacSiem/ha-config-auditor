@@ -1,3 +1,10 @@
+## 6.0.1 (unreleased)
+
+- Security: incomplete YAML scans and browser heuristics no longer report a verified PASS; HTTPS configured in a URL is not presented as a tested endpoint.
+- Security: failed audit exception details are redacted from logs.
+- UI: support prompts are optional and visible only to administrators; current light and dark screenshots reflect the corrected findings.
+- Tests: Home Assistant runtime coverage includes the minimum supported version and current/beta Core.
+
 ## 6.0.0 (2026-09-24)
 
 - New: **Config Auditor integration** (`custom_components/ha_config_auditor`). It verifies on the server what a browser card cannot read: enabled login providers (`legacy_api_password`, `trusted_networks` with or without login bypass), administrators without two-factor authentication, HTTPS, `trusted_proxies`, IP ban after failed logins, and plain-text secrets in YAML files (reported as file, line and key only; values are never returned).

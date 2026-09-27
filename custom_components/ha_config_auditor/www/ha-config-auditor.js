@@ -1,4 +1,4 @@
-/* HA Tools split — ha-config-auditor v6.0.0 (2026-09-24) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v6.0.1 (2026-09-24) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -2137,7 +2137,7 @@ if (!customElements.get('ha-config-auditor')) {
 }
 
 console.info(
-  '%c  HA-CONFIG-AUDITOR  %c v6.0.0 ',
+  '%c  HA-CONFIG-AUDITOR  %c v6.0.1 ',
   'background: #f44336; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #ffebee; color: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
