@@ -157,7 +157,7 @@ async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> Non
     hass.config.external_url = "http://my-home.example.com:8123"
     assert (await audit._check_transport(hass))[0].status == "fail"
     hass.config.external_url = "https://my-home.example.com"
-    assert (await audit._check_transport(hass))[0].status == "pass"
+    assert (await audit._check_transport(hass))[0].status == "info"
     hass.config.external_url = "http://192.168.1.10:8123"
     assert (await audit._check_transport(hass))[0].status == "info"
     hass.config.external_url = None
@@ -217,8 +217,11 @@ async def test_plaintext_secret_scan_does_not_pass_when_file_limit_truncates(has
     result = audit._scan_plaintext_secrets(str(tmp_path))
     assert result["truncated"] is True
     assert result["complete"] is False
-    monkeypatch.setattr(hass.config, "config_dir", str(tmp_path))
-    finding = (await audit._check_plaintext_secrets(hass))[0]
+    async def executor(func, *args):
+        return func(*args)
+
+    fake_hass = SimpleNamespace(config=SimpleNamespace(config_dir=str(tmp_path)), async_add_executor_job=executor)
+    finding = (await audit._check_plaintext_secrets(fake_hass))[0]
     assert finding.status == "skipped"
     assert "incomplete" in finding.detail.lower()
 

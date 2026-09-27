@@ -21,10 +21,10 @@ them through an admin-only WebSocket command (`ha_config_auditor/audit`):
 |---|---|
 | Login providers | Enabled auth providers; `legacy_api_password` fails, `trusted_networks` warns (fails with `allow_bypass_login`) |
 | Administrator MFA | Active administrators who can log in remotely and have no MFA module enabled |
-| HTTPS | Whether HA serves TLS itself or the external URL uses HTTPS |
+| HTTPS | Whether HA serves TLS itself; an HTTPS external URL is reported as configured, without claiming the remote endpoint was probed |
 | Trusted proxies | `trusted_proxies` of the running HTTP server; `0.0.0.0/0` fails, large public ranges warn |
 | IP ban | Whether failed logins lead to an IP ban (`ip_ban_enabled` + `login_attempts_threshold`) |
-| Plain-text secrets | YAML files in the config folder with `password`/`token`/`api_key`/`secret` values not using `!secret` — reported as file, line and key; **values are never read into the result** |
+| Plain-text secrets | A bounded heuristic scan of configuration YAML for `password`/`token`/`api_key`/`secret` literals. Findings show file, line and key, never values; an incomplete scan is not a pass. No match is informational, not proof that every secret is protected. |
 
 A check that cannot run is shown as *not checked* with the reason — never as
 passed. Without the integration the card says these checks are unavailable
