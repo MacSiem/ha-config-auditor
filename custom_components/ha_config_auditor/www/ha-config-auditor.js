@@ -708,7 +708,7 @@ class HAConfigAuditor extends HTMLElement {
       // Detect non-supervised HA installation
       if (!hostInfo && !osInfo && !supervisorInfo && !coreInfo) {
         const L = this._lang === 'pl';
-        findings.info.push({ id: 'no_supervisor', title: L ? 'Brak Supervisor API' : 'No Supervisor API detected', desc: L ? 'Cz\u0119\u015B\u0107 sprawdze\u0144 konfiguracji wymaga HA OS lub HA Supervised (aktualizacje systemu, skanowanie dodatk\u00F3w, analiza sieci).' : 'Some configuration checks require HA OS or Supervised installation (system updates, addon scanning, network analysis).', fix: L ? 'Zainstaluj Home Assistant OS dla pe\u0142nego zakresu audytu' : 'Install HA OS for full configuration audit coverage' });
+        findings.info.push({ id: 'no_supervisor', title: L ? 'Supervisor API niedostępne' : 'Supervisor API unavailable', desc: L ? 'Nie sprawdzono aktualizacji systemu, dodatków ani sieci Supervisor. Powodem może być wariant instalacji albo brak uprawnień.' : 'System updates, add-ons and Supervisor network checks were not run. The installation type or account permissions may explain this.', fix: L ? 'Sprawdź typ instalacji i uprawnienia konta' : 'Check installation type and account permissions' });
       }
 
       if (coreInfo) {
@@ -716,16 +716,20 @@ class HAConfigAuditor extends HTMLElement {
         const latest = coreInfo.version_latest;
         if (current && latest && current !== latest) {
           findings.warning.push({ id: 'core_update', title: 'HA Core update available', desc: `Current: ${current} \u2192 Latest: ${latest}`, fix: 'Update via Settings \u2192 System \u2192 Updates' });
-        } else if (current) {
+        } else if (current && latest && current === latest) {
           findings.pass.push({ id: 'core_update', title: 'HA Core is up to date', desc: `Version: ${current}` });
+        } else if (current) {
+          findings.info.push({ id: 'core_update', title: 'HA Core update status not checked', desc: `Current version: ${current}; latest version unavailable` });
         }
       }
 
       if (supervisorInfo) {
-        if (supervisorInfo.version !== supervisorInfo.version_latest) {
+        if (supervisorInfo.version && supervisorInfo.version_latest && supervisorInfo.version !== supervisorInfo.version_latest) {
           findings.warning.push({ id: 'supervisor_update', title: 'Supervisor update available', desc: `Current: ${supervisorInfo.version} \u2192 Latest: ${supervisorInfo.version_latest}`, fix: 'Update the Supervisor from System settings' });
-        } else {
+        } else if (supervisorInfo.version && supervisorInfo.version_latest) {
           findings.pass.push({ id: 'supervisor_update', title: 'Supervisor is up to date', desc: `Version: ${supervisorInfo.version}` });
+        } else {
+          findings.info.push({ id: 'supervisor_update', title: 'Supervisor update status not checked', desc: 'Version comparison data is incomplete.' });
         }
       }
 
@@ -771,17 +775,17 @@ class HAConfigAuditor extends HTMLElement {
       const externalUrl = configEntries?.external_url || '';
       if (externalUrl) {
         if (externalUrl.startsWith('https://')) {
-          findings.pass.push({ id: 'ssl_external', title: 'External access uses HTTPS', desc: `External URL: ${externalUrl}` });
+          findings.info.push({ id: 'ssl_external', title: 'External URL is configured for HTTPS', desc: `Configured URL: ${externalUrl}. The remote endpoint and certificate were not tested.` });
         } else if (externalUrl.startsWith('http://')) {
-          findings.critical.push({ id: 'ssl_external', title: 'External access without SSL!', desc: `External URL uses plain HTTP: ${externalUrl}`, fix: 'Configure SSL/TLS for external access via NGINX, Cloudflare tunnel, or DuckDNS addon' });
+          findings.warning.push({ id: 'ssl_external', title: 'External URL is configured for HTTP', desc: `Configured URL: ${externalUrl}. Remote reachability was not tested.`, fix: 'If this URL is reachable outside your trusted network, configure HTTPS.' });
         }
       } else {
-        findings.info.push({ id: 'ssl_external', title: 'No external URL configured', desc: 'HA is only accessible locally (or external access not configured in HA)', fix: 'If you access HA remotely, configure external_url in configuration.yaml' });
+        findings.info.push({ id: 'ssl_external', title: 'No external URL configured', desc: 'Remote reachability was not tested.', fix: 'Review remote access separately if you use it.' });
       }
 
       const internalUrl = configEntries?.internal_url || '';
       if (internalUrl && internalUrl.startsWith('https://')) {
-        findings.pass.push({ id: 'ssl_internal', title: 'Internal access uses HTTPS', desc: `Internal URL: ${internalUrl}` });
+        findings.info.push({ id: 'ssl_internal', title: 'Internal URL is configured for HTTPS', desc: `Configured URL: ${internalUrl}. The certificate was not tested.` });
       }
 
       // K1: Certificate & DNS best-practice checks
@@ -789,7 +793,7 @@ class HAConfigAuditor extends HTMLElement {
         try {
           const hostname = new URL(externalUrl).hostname;
           if (hostname.endsWith('.duckdns.org') || hostname.endsWith('.nabu.casa')) {
-            findings.pass.push({ id: 'ssl_cert_managed', title: 'SSL certificate is auto-managed', desc: `${hostname} uses managed SSL (auto-renewed)` });
+            findings.info.push({ id: 'ssl_cert_managed', title: 'Managed SSL provider domain detected', desc: `${hostname} is configured. Certificate status and renewal were not checked.` });
           } else {
             findings.info.push({ id: 'ssl_cert_check', title: 'Verify SSL certificate expiry', desc: `Hostname: ${hostname} — ensure your cert is auto-renewed (Let''s Encrypt, Cloudflare, etc.)`, fix: 'Use certbot with auto-renewal or a Cloudflare tunnel for hassle-free SSL' });
           }
@@ -1039,7 +1043,7 @@ class HAConfigAuditor extends HTMLElement {
       // NEW CHECK: Firewall / Network isolation
       try {
         if (hostInfo?.chassis && hostInfo.chassis !== 'embedded') {
-          findings.warning.push({ id: 'non_haos', title: 'Running on non-HAOS system', desc: `Detected chassis: ${hostInfo.chassis}. Missing Supervisor network isolation.`, fix: 'Use Home Assistant OS for built-in network isolation features. Manual firewall configuration is required on generic Linux.' });
+          findings.info.push({ id: 'host_chassis', title: 'Host hardware type', desc: `Supervisor reports chassis: ${hostInfo.chassis}. This does not establish installation type or network isolation.` });
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
@@ -1064,8 +1068,10 @@ class HAConfigAuditor extends HTMLElement {
             const opts = mqttConfig?.options || mqttConfig?.data?.options || {};
             if (opts.anonymous === true) {
               findings.critical.push({ id: 'mqtt_anonymous', title: 'MQTT allows anonymous connections', desc: 'Anyone on the network can connect to your MQTT broker without authentication', fix: 'Disable anonymous access in Mosquitto addon configuration and set up proper user credentials' });
-            } else {
+            } else if (opts.anonymous === false) {
               findings.pass.push({ id: 'mqtt_anonymous', title: 'MQTT requires authentication', desc: 'Anonymous connections are disabled' });
+            } else {
+              findings.info.push({ id: 'mqtt_anonymous', title: 'MQTT anonymous access not checked', desc: 'The add-on response did not include an explicit anonymous setting.' });
             }
           } catch(e2) {
             findings.info.push({ id: 'mqtt_config', title: 'Could not verify MQTT configuration', desc: 'Unable to read Mosquitto addon settings', fix: 'Manually verify MQTT authentication settings' });
@@ -1093,7 +1099,7 @@ class HAConfigAuditor extends HTMLElement {
       try {
         const externalUrl = this._hass.config?.external_url || '';
         if (externalUrl && externalUrl.includes(':8123')) {
-          findings.warning.push({ id: 'port_exposure', title: 'Default port 8123 exposed externally', desc: `External URL uses default HA port: ${externalUrl}`, fix: 'Use a reverse proxy (NGINX, Caddy) or Nabu Casa instead of direct port forwarding. Change default port if exposing directly.' });
+          findings.info.push({ id: 'port_exposure', title: 'External URL includes port 8123', desc: `Configured external URL: ${externalUrl}. Internet reachability was not tested.`, fix: 'Review firewall and reverse proxy configuration if remote access is intended.' });
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
