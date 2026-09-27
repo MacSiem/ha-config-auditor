@@ -76,9 +76,9 @@ instead of guessing.
 |---|---|
 | ![Overview tab, light theme](docs/screenshots/card-overview-light.png) | ![Overview tab, dark theme](docs/screenshots/card-overview-dark.png) |
 
-*Overview tab: check summary (Failed / Warnings / Passed / Info), key counts
-and the Failed/Warning findings. Dark mode follows your Home Assistant theme
-automatically.*
+*Overview tab with synthetic checks: Failed, Warnings, Passed and Info counts,
+plus example findings. No household configuration appears in the image. Dark
+mode follows your Home Assistant theme.*
 
 ## Installation
 
