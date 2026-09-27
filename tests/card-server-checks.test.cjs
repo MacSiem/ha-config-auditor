@@ -21,10 +21,10 @@ const REPORT = {
   ],
 };
 
-function hass(server) {
+function hass(server, config = {}) {
   return {
     states: {}, language: 'en', themes: { darkMode: false },
-    user: { is_admin: true }, config: { components: [], external_url: null, version: '2026.9.3' },
+    user: { is_admin: true }, config: { components: [], external_url: null, version: '2026.9.3', ...config },
     callWS: async (msg) => {
       if (msg.type === 'ha_config_auditor/audit') {
         if (server) return server;
@@ -40,7 +40,7 @@ function hass(server) {
   };
 }
 
-async function audit(server) {
+async function audit(server, config = {}) {
   const dom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/' });
   const w = dom.window;
   w.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
@@ -48,7 +48,7 @@ async function audit(server) {
   const card = w.document.createElement('ha-config-auditor');
   card.setConfig({ type: 'custom:ha-config-auditor' });
   w.document.body.appendChild(card);
-  card.hass = hass(server);
+  card.hass = hass(server, config);
   for (let i = 0; i < 50 && (card._loading || !card._auditData); i++) await delay(20);
   const data = card._auditData;
   const html = card.shadowRoot.innerHTML;
@@ -82,4 +82,10 @@ test('without the integration nothing about auth or HTTP is guessed', async () =
 test('the integration ships the same card as the plugin', () => {
   const www = fs.readFileSync(path.join(ROOT, 'custom_components/ha_config_auditor/www/ha-config-auditor.js'), 'utf8');
   assert.equal(www, CARD);
+});
+
+test('configured external HTTPS URL is not reported as a verified connection', async () => {
+  const { data } = await audit(null, { external_url: 'https://example.invalid' });
+  assert.ok(!ids(data.findings.pass).includes('ssl_external'));
+  assert.ok(ids(data.findings.info).includes('ssl_external'));
 });
