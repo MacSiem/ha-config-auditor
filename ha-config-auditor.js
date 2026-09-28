@@ -539,7 +539,7 @@ function _bindLocalIntroDismiss(root) {
 class HAConfigAuditor extends HTMLElement {
   static getConfigElement() { return document.createElement('ha-config-auditor-editor'); }
   getCardSize() { return 6; }
-  getGridOptions() { return { rows: 6, columns: 12, min_rows: 3, min_columns: 6 }; }
+  getGridOptions() { return { columns: 12, min_rows: 3, min_columns: 6 }; }
 
   static getStubConfig() { return { type: 'custom:ha-config-auditor', title: 'Config Auditor' }; }
   constructor() {
