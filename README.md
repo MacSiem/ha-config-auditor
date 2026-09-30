@@ -168,3 +168,9 @@ The optional in-card support link is shown only to administrators. Dismiss it in
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Privacy and data
+
+The integration reads security settings and allowed configuration files on your Home Assistant server. Audit results can reveal security weaknesses. Treat findings and YAML as private, and share only a minimal redacted reproduction. The audit itself does not modify the configuration.
+
+See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
