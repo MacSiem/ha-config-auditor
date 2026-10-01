@@ -736,12 +736,16 @@ class HAConfigAuditor extends HTMLElement {
       }
 
       let addons = [];
+      let addonsAvailable = false;
       try {
         const addonList = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' });
-        addons = addonList?.addons || addonList?.data?.addons || [];
+        const inventory = addonList?.addons ?? addonList?.data?.addons;
+        addonsAvailable = Array.isArray(inventory);
+        addons = addonsAvailable ? inventory : [];
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      const installedAddons = addons.filter(a => a.installed);
+      // /addons lists installed add-ons without an `installed` flag.
+      const installedAddons = addons.filter(a => a.installed !== false);
 
       const outdatedAddons = installedAddons.filter(a => a.update_available);
       if (outdatedAddons.length > 0) {
@@ -1141,7 +1145,7 @@ class HAConfigAuditor extends HTMLElement {
         cfgEntries = entries || [];
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, addons: installedAddons, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
+      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, addons: installedAddons, addonsAvailable, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
     this._saveScanData();
 
@@ -1870,7 +1874,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       </div>
     </div>`;
     const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
-    const addonsDisplay = noSupervisor && d.addons.length === 0 ? 'N/A' : String(d.addons.length);
+    const addonsDisplay = d.addonsAvailable === true ? String(d.addons.length) : 'N/A';
     const integrationsDisplay = d.integrations?.length || 0;
     html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${noSupervisor && d.addons.length === 0 ? 'Addons (HA OS only)' : 'Addons installed'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Integrations</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.users.length}</div><div style="font-size:11px;color:var(--bento-text-secondary)">User accounts</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
     if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
@@ -1905,12 +1909,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   _renderAddonsSection(d) {
+    if (d.addonsAvailable !== true) return '<div class="empty-msg">Add-on inventory is unavailable; installed count was not measured.</div>';
     if (!d.addons.length) {
       const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
       if (noSupervisor) return `<div class="empty-msg">\u2139\uFE0F ${this._lang === 'pl' ? 'Addony wymagaj\u0105 HA OS lub Supervised. Brak Supervisor API na tej instalacji.' : 'Addons require HA OS or Supervised. No Supervisor API detected on this installation.'}</div>`;
       return '<div class="empty-msg">No addons installed</div>';
     }
-    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = a.protected !== false; const autoUp = a.auto_update !== false; const hostNet = a.host_network === true; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(a.state || 'stopped')}</td><td style="color:${prot ? '#4caf50' : '#f44336'}">${prot ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${autoUp ? '#4caf50' : '#ff9800'}">${autoUp ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet ? '\u26A0 Yes' : 'No'}</td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(a.state || 'stopped')}</td><td style="color:${prot ? '#4caf50' : '#f44336'}">${prot === null ? 'N/A' : prot ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? 'N/A' : autoUp ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? 'N/A' : hostNet ? '\u26A0 Yes' : 'No'}</td></tr>`; }).join('')}</tbody></table></div>`;
   }
 
   _renderUsers(d) {
@@ -2005,7 +2010,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += '<div class="section-title">\u{1F5A5}\uFE0F Exposed Addon Ports</div>';
     const exposedAddons = d.addons.filter(a => (a.ports && Object.keys(a.ports).length > 0) || (a.network && Object.keys(a.network).length > 0));
     if (exposedAddons.length === 0) {
-      html += '<div class="empty-msg">No addons exposing ports</div>';
+      const portsKnown = d.addonsAvailable === true && d.addons.every(a => Object.hasOwn(a, 'ports') || Object.hasOwn(a, 'network'));
+      html += portsKnown ? '<div class="empty-msg">No addons exposing ports</div>' : '<div class="empty-msg">Add-on port inventory is unavailable; exposure was not measured.</div>';
     } else {
       html += '<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Ingress</th><th>Ports</th><th>State</th></tr></thead><tbody>';
       exposedAddons.forEach(a => {
