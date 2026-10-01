@@ -21,11 +21,12 @@ const REPORT = {
   ],
 };
 
-function hass(server, config = {}) {
+function hass(server, config = {}, responses = {}) {
   return {
     states: {}, language: 'en', themes: { darkMode: false },
     user: { is_admin: true }, config: { components: [], external_url: null, version: '2026.9.3', ...config },
     callWS: async (msg) => {
+      if (msg.type === 'supervisor/api' && Object.hasOwn(responses, msg.endpoint)) return responses[msg.endpoint];
       if (msg.type === 'ha_config_auditor/audit') {
         if (server) return server;
         const err = new Error('Unknown command.'); err.code = 'unknown_command'; throw err;
@@ -40,7 +41,7 @@ function hass(server, config = {}) {
   };
 }
 
-async function audit(server, config = {}) {
+async function audit(server, config = {}, responses = {}) {
   const dom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/' });
   const w = dom.window;
   w.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
@@ -48,13 +49,15 @@ async function audit(server, config = {}) {
   const card = w.document.createElement('ha-config-auditor');
   card.setConfig({ type: 'custom:ha-config-auditor' });
   w.document.body.appendChild(card);
-  card.hass = hass(server, config);
+  card.hass = hass(server, config, responses);
   for (let i = 0; i < 50 && (card._loading || !card._auditData); i++) await delay(20);
   const data = card._auditData;
   const html = card.shadowRoot.innerHTML;
   const findingsHtml = card._renderFindings(data);
+  const addonsHtml = card._renderAddonsSection(data);
+  const networkHtml = card._renderNetwork(data);
   w.close();
-  return { data, html, findingsHtml };
+  return { data, html, findingsHtml, addonsHtml, networkHtml };
 }
 
 const ids = (list) => list.map((f) => f.id);
@@ -88,4 +91,29 @@ test('configured external HTTPS URL is not reported as a verified connection', a
   const { data } = await audit(null, { external_url: 'https://example.invalid' });
   assert.ok(!ids(data.findings.pass).includes('ssl_external'));
   assert.ok(ids(data.findings.info).includes('ssl_external'));
+});
+
+test('Supervisor installed addon summaries do not require an installed flag', async () => {
+  const addons = Array.from({ length: 21 }, (_, i) => ({ slug: `qa_${i}`, name: `QA ${i}`, version: '1.0', state: 'started', update_available: false }));
+  const { data, addonsHtml, networkHtml } = await audit(REPORT, {}, { '/addons': { addons } });
+  assert.equal(data.addons.length, 21, 'real /addons response already lists installed addons');
+  assert.ok(!addonsHtml.includes('On</td>'), 'missing protection/auto-update must not be claimed enabled');
+  assert.ok((addonsHtml.match(/N\/A/g) || []).length >= 63, 'missing protection, auto-update and host-network must be unknown');
+  assert.ok(!networkHtml.includes('No addons exposing ports'), 'missing port inventory cannot prove no exposure');
+});
+
+test('unavailable addon inventory differs from a measured empty inventory', async () => {
+  const missing = await audit(REPORT, {}, { '/os/info': { version: '1.0' } });
+  assert.ok(missing.addonsHtml.includes('unavailable'));
+  assert.ok(!missing.addonsHtml.includes('No addons installed'));
+  const empty = await audit(REPORT, {}, { '/addons': { addons: [] } });
+  assert.ok(empty.addonsHtml.includes('No addons installed'));
+  assert.ok(empty.networkHtml.includes('No addons exposing ports'));
+});
+
+test('explicit false addon metadata remains a measured disabled value', async () => {
+  const { addonsHtml } = await audit(REPORT, {}, { '/addons': { addons: [{ slug: 'qa', name: 'QA', version: '1.0', state: 'started', protected: false, auto_update: false, host_network: false, network: {} }] } });
+  assert.ok(addonsHtml.includes('Off</td>'));
+  assert.ok(addonsHtml.includes('No</td>'));
+  assert.ok(!addonsHtml.includes('N/A'));
 });
