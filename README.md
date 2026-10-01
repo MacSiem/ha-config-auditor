@@ -105,6 +105,13 @@ type: custom:ha-config-auditor
 The integration registers the card for dashboards itself. If the card is
 already loaded from a HACS Dashboard install, it does not add a second copy.
 
+Keep your working Dashboard plugin, its resources, and existing card configuration
+while trying the integration. In storage mode the integration reuses the existing
+card resource. Check that your dashboards still work and the integration is loaded
+before retiring the plugin. The public plugin remains available until the
+integration release and migration have been verified. A category change alone
+is not a verified migration.
+
 **Options** (Settings → Devices & services → Config Auditor → Configure):
 show or hide the sidebar panel, and report failed/warning checks in
 Settings → Repairs.
