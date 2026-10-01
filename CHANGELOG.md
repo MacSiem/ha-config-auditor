@@ -1,5 +1,6 @@
 ## 6.0.1 (unreleased)
 
+- Allow wide add-on tables to scroll within narrow cards so all metadata columns remain accessible.
 - Read installed add-ons from the Supervisor inventory without requiring an absent installed flag; show unavailable inventory and missing protection, auto-update, host-network and port metadata explicitly.
 - Security: incomplete YAML scans and browser heuristics no longer report a verified PASS; HTTPS configured in a URL is not presented as a tested endpoint.
 - Security: failed audit exception details are redacted from logs.
