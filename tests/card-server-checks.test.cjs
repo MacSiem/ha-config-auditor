@@ -31,7 +31,13 @@ function hass(server, config = {}, responses = {}) {
         if (server) return server;
         const err = new Error('Unknown command.'); err.code = 'unknown_command'; throw err;
       }
-      if (msg.type === 'config/auth/list') return [{ name: 'Admin', is_owner: true, is_active: true }];
+      if (msg.type === 'config/auth/list') {
+        if (Object.hasOwn(responses, msg.type)) {
+          if (responses[msg.type] instanceof Error) throw responses[msg.type];
+          return responses[msg.type];
+        }
+        return [{ name: 'Admin', is_owner: true, is_active: true }];
+      }
       if (msg.type === 'config_entries/get') return [];
       throw new Error('not supported');
     },
@@ -116,4 +122,28 @@ test('explicit false addon metadata remains a measured disabled value', async ()
   assert.ok(addonsHtml.includes('Off</td>'));
   assert.ok(addonsHtml.includes('No</td>'));
   assert.ok(!addonsHtml.includes('N/A'));
+});
+
+
+test('denied or malformed user inventory never reports a measured zero', async () => {
+  for (const response of [new Error('unauthorized'), null, { error: 'unavailable' }]) {
+    const { data, html } = await audit(null, {}, { 'config/auth/list': response });
+    const dom = new JSDOM(html);
+    const label = [...dom.window.document.querySelectorAll('div')].find(el => el.textContent === 'User accounts unavailable');
+    assert.ok(label, 'missing account inventory must be explicit');
+    assert.equal(label.previousElementSibling.textContent, 'N/A');
+    assert.ok(ids(data.findings.info).includes('user_inventory_unavailable'));
+    dom.window.close();
+  }
+});
+
+test('a measured empty or populated user inventory retains its actual count', async () => {
+  for (const [response, count] of [[[], '0'], [[{ name: 'QA', is_active: true }], '1']]) {
+    const { html } = await audit(null, {}, { 'config/auth/list': response });
+    const dom = new JSDOM(html);
+    const label = [...dom.window.document.querySelectorAll('div')].find(el => el.textContent === 'User accounts');
+    assert.ok(label);
+    assert.equal(label.previousElementSibling.textContent, count);
+    dom.window.close();
+  }
 });
