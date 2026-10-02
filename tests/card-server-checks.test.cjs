@@ -76,6 +76,7 @@ test('selected tab follows the visible content immediately after navigation', as
     const card = dom.window.document.createElement('ha-config-auditor');
     card.setConfig({ type: 'custom:ha-config-auditor' });
     dom.window.document.body.appendChild(card);
+    card._hass = hass(null);
     card._loading = false;
     card._auditData = data;
     card._render();
