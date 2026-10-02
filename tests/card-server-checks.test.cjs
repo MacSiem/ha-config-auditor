@@ -68,6 +68,27 @@ async function audit(server, config = {}, responses = {}) {
 
 const ids = (list) => list.map((f) => f.id);
 
+test('selected tab follows the visible content immediately after navigation', () => {
+  const dom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously', url: 'http://localhost/' });
+  try {
+    dom.window.eval(CARD);
+    const card = dom.window.document.createElement('ha-config-auditor');
+    card.setConfig({ type: 'custom:ha-config-auditor' });
+    dom.window.document.body.appendChild(card);
+    card._loading = false;
+    card._auditData = { users: [], usersAvailable: false };
+    card._render();
+    for (const tab of ['users', 'tips', 'overview']) {
+      const button = card.shadowRoot.querySelector(`[data-tab="${tab}"]`);
+      button.click();
+      assert.equal(button.getAttribute('aria-selected'), 'true');
+      assert.equal(card.shadowRoot.querySelectorAll('[role="tab"][aria-selected="true"]').length, 1);
+      assert.equal(card._activeTab, tab);
+      if (tab === 'users') assert.match(card.shadowRoot.getElementById('content').textContent, /User accounts are unavailable/);
+    }
+  } finally { dom.window.close(); }
+});
+
 test('server findings are placed by status and marked as server-verified', async () => {
   const { data, findingsHtml } = await audit(REPORT);
   assert.equal(data.serverVersion, '6.0.0');
