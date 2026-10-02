@@ -1,5 +1,6 @@
 ## 6.0.1 (unreleased)
 
+- Keep the selected tab announced to assistive technology in sync with visible content immediately after navigation.
 - Show unavailable user inventory as N/A instead of zero when permissions, malformed responses or connection failures prevent reading it; retain measured empty and populated counts.
 
 - Allow wide add-on tables to scroll within narrow cards so all metadata columns remain accessible.

@@ -1839,8 +1839,12 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     this.shadowRoot.querySelectorAll('.tab-button').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.shadowRoot.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        this.shadowRoot.querySelectorAll('.tab-button').forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-selected', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
         this._activeTab = btn.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this._activeTab);
         this._updateContent();
