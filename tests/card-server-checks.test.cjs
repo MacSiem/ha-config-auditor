@@ -68,7 +68,8 @@ async function audit(server, config = {}, responses = {}) {
 
 const ids = (list) => list.map((f) => f.id);
 
-test('selected tab follows the visible content immediately after navigation', () => {
+test('selected tab follows the visible content immediately after navigation', async () => {
+  const { data } = await audit(null, {}, { 'config/auth/list': new Error('unauthorized') });
   const dom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously', url: 'http://localhost/' });
   try {
     dom.window.eval(CARD);
@@ -76,7 +77,7 @@ test('selected tab follows the visible content immediately after navigation', ()
     card.setConfig({ type: 'custom:ha-config-auditor' });
     dom.window.document.body.appendChild(card);
     card._loading = false;
-    card._auditData = { users: [], usersAvailable: false };
+    card._auditData = data;
     card._render();
     for (const tab of ['users', 'tips', 'overview']) {
       const button = card.shadowRoot.querySelector(`[data-tab="${tab}"]`);
