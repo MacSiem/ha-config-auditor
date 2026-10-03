@@ -562,6 +562,7 @@ class HAConfigAuditor extends HTMLElement {
     this._lastScan = null;
     this._lastHtml = '';
     this._lastAuditTime = 0;
+    this._auditEpoch = 0;
   }
 
   // -- Persistence --
@@ -595,12 +596,25 @@ class HAConfigAuditor extends HTMLElement {
       this.classList.toggle('bento-dark', _d);
     } catch (e) {}
     try {
+      const previousUser = this._hass?.user;
+      const previousLanguage = this._lang;
       this._hass = hass;
+      this._lang = (hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en';
+      const authorityChanged = previousUser?.is_admin !== hass?.user?.is_admin || previousUser?.id !== hass?.user?.id;
+      if (authorityChanged || hass?.user?.is_admin !== true) {
+        this._auditEpoch++;
+        this._auditData = null;
+        this._loading = false;
+        this._firstHassRender = false;
+        this._lastHtml = '';
+        this._currentPage = {};
+      }
       if (!this._config) this._config = { title: 'Config Auditor' };
-      if (!hass) return;
+      if (hass?.user?.is_admin !== true) { this._render(); return; }
       const now = Date.now();
       if (!this._firstHassRender) {
         this._firstHassRender = true;
+        this._lastAuditTime = now;
         this._runAudit();
         this._render();
         this._lastRenderTime = now;
@@ -611,6 +625,7 @@ class HAConfigAuditor extends HTMLElement {
         this._lastAuditTime = now;
         this._runAudit();
       }
+      if (previousLanguage !== this._lang) { this._lastHtml = ''; this._render(); }
       // Throttle render to 60s — audit results are static
       if (now - (this._lastRenderTime || 0) < 60000) {
         return;
@@ -633,6 +648,7 @@ class HAConfigAuditor extends HTMLElement {
         save: 'Zapisz',
         cancel: 'Anuluj',
         locale: 'pl-PL',
+        adminRequired: 'Audyt konfiguracji wymaga uprawnień administratora.',
       },
       en: {
         title: 'Config Auditor',
@@ -643,6 +659,7 @@ class HAConfigAuditor extends HTMLElement {
         save: 'Save',
         cancel: 'Cancel',
         locale: 'en-US',
+        adminRequired: 'Configuration audit requires administrator permissions.',
       },
     };
     return T[this._lang] || T.en;
@@ -684,7 +701,16 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   async _runAudit() {
-    if (!this._hass) return;
+    if (this._hass?.user?.is_admin !== true) return;
+    const auditHass = this._hass;
+    const epoch = ++this._auditEpoch;
+    const isCurrent = () => epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditHass.user.id;
+    const callWS = async message => {
+      if (!isCurrent()) throw new Error('Audit authority changed');
+      const response = await auditHass.callWS(message);
+      if (!isCurrent()) throw new Error('Audit authority changed');
+      return response;
+    };
     this._loading = true;
     this._updateContent();
 
@@ -694,10 +720,10 @@ class HAConfigAuditor extends HTMLElement {
 
     try {
       let hostInfo = null, osInfo = null, supervisorInfo = null, coreInfo = null;
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/host/info', method: 'get' }); hostInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/os/info', method: 'get' }); osInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/supervisor/info', method: 'get' }); supervisorInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/core/info', method: 'get' }); coreInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/host/info', method: 'get' }); hostInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/os/info', method: 'get' }); osInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/supervisor/info', method: 'get' }); supervisorInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/core/info', method: 'get' }); coreInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // Detect non-supervised HA installation
       if (!hostInfo && !osInfo && !supervisorInfo && !coreInfo) {
@@ -738,7 +764,7 @@ class HAConfigAuditor extends HTMLElement {
       let addons = [];
       let addonsAvailable = false;
       try {
-        const addonList = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' });
+        const addonList = await callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' });
         const inventory = addonList?.addons ?? addonList?.data?.addons;
         addonsAvailable = Array.isArray(inventory);
         addons = addonsAvailable ? inventory : [];
@@ -769,7 +795,7 @@ class HAConfigAuditor extends HTMLElement {
         findings.info.push({ id: 'auto_update', title: `${noAutoUpdate.length} addon(s) without auto-update`, desc: noAutoUpdate.map(a => (a.name)).join(', '), fix: 'Consider enabling auto-update for non-critical addons' });
       }
 
-      const configEntries = this._hass.config;
+      const configEntries = auditHass.config;
       const externalUrl = configEntries?.external_url || '';
       if (externalUrl) {
         if (externalUrl.startsWith('https://')) {
@@ -802,7 +828,7 @@ class HAConfigAuditor extends HTMLElement {
       let users = [];
       let usersAvailable = false;
       try {
-        const userList = await this._hass.callWS({ type: 'config/auth/list' });
+        const userList = await callWS({ type: 'config/auth/list' });
         if (Array.isArray(userList)) { users = userList; usersAvailable = true; }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
@@ -823,7 +849,7 @@ class HAConfigAuditor extends HTMLElement {
         }
       }
 
-      const states = this._hass.states;
+      const states = auditHass.states;
       const allEntities = Object.keys(states || {});
 
       const shellEntities = allEntities.filter(e => e.startsWith('shell_command.'));
@@ -868,7 +894,7 @@ class HAConfigAuditor extends HTMLElement {
 
       // Long-lived access tokens check
       try {
-        const llat = await this._hass.callWS({ type: 'auth/long_lived_access_token/list' }).catch(() => []);
+        const llat = await callWS({ type: 'auth/long_lived_access_token/list' }).catch(() => []);
         if (llat && llat.length > 5) {
           findings.warning.push({ id: 'many_tokens', title: `${llat.length} long-lived access tokens`, desc: 'Many active access tokens increase attack surface', fix: 'Review and revoke unused tokens at Profile \u2192 Long-lived access tokens' });
         } else if (llat && llat.length > 0) {
@@ -902,7 +928,7 @@ class HAConfigAuditor extends HTMLElement {
       // Server-verified checks (Config Auditor integration). These replace the
       // earlier browser-side guesses about auth providers, IP bans and HTTP
       // settings, which the frontend cannot actually read.
-      const server = await this._serverAudit();
+      const server = await this._serverAudit(callWS);
       if (server && Array.isArray(server.findings)) {
         const bucketFor = { fail: 'critical', warning: 'warning', info: 'info', pass: 'pass', skipped: 'info' };
         for (const sf of server.findings) {
@@ -1001,7 +1027,7 @@ class HAConfigAuditor extends HTMLElement {
         const recorderEntities = allEntities.filter(e => e.startsWith('recorder.'));
         if (recorderEntities.length > 0) {
           const recorderState = states['automation.'] || states['script.'];
-          const purgeKeepDays = this._hass.config?.components?.recorder?.purge_keep_days;
+          const purgeKeepDays = auditHass.config?.components?.recorder?.purge_keep_days;
           if (purgeKeepDays && purgeKeepDays > 30) {
             findings.info.push({ id: 'recorder_retention', title: `Recorder keeping data for ${purgeKeepDays} days`, desc: 'Long retention can be a privacy concern if you have guests or visitors', fix: 'Consider reducing purge_keep_days in configuration.yaml if privacy is a concern' });
           }
@@ -1050,7 +1076,7 @@ class HAConfigAuditor extends HTMLElement {
 
       // NEW CHECK: Backup encryption
       try {
-        const backups = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/backups', method: 'get' });
+        const backups = await callWS({ type: 'supervisor/api', endpoint: '/backups', method: 'get' });
         const backupList = backups?.backups || backups?.data?.backups || [];
         if (backupList.length > 0) {
           const unencryptedBackups = backupList.filter(b => b.protected === false);
@@ -1065,7 +1091,7 @@ class HAConfigAuditor extends HTMLElement {
         const mqttAddonRunning = installedAddons.find(a => (a.slug || '').includes('mosquitto') && a.state === 'started');
         if (mqttAddonRunning) {
           try {
-            const mqttConfig = await this._hass.callWS({ type: 'supervisor/api', endpoint: `/addons/${mqttAddonRunning.slug}/options`, method: 'get' });
+            const mqttConfig = await callWS({ type: 'supervisor/api', endpoint: `/addons/${mqttAddonRunning.slug}/options`, method: 'get' });
             const opts = mqttConfig?.options || mqttConfig?.data?.options || {};
             if (opts.anonymous === true) {
               findings.critical.push({ id: 'mqtt_anonymous', title: 'MQTT allows anonymous connections', desc: 'Anyone on the network can connect to your MQTT broker without authentication', fix: 'Disable anonymous access in Mosquitto addon configuration and set up proper user credentials' });
@@ -1090,7 +1116,7 @@ class HAConfigAuditor extends HTMLElement {
 
       // NEW CHECK: HTTP configuration (CORS)
       try {
-        const httpConfig = this._hass.config;
+        const httpConfig = auditHass.config;
         if (httpConfig?.components?.includes('cors') || httpConfig?.allowlist_external_urls?.length > 0) {
           findings.info.push({ id: 'cors_config', title: 'CORS or external URL allowlist configured', desc: 'Cross-origin requests or external URLs are permitted', fix: 'Review allowed origins and URLs to ensure they are trusted' });
         }
@@ -1098,7 +1124,7 @@ class HAConfigAuditor extends HTMLElement {
 
       // NEW CHECK: Port 8123 direct exposure
       try {
-        const externalUrl = this._hass.config?.external_url || '';
+        const externalUrl = auditHass.config?.external_url || '';
         if (externalUrl && externalUrl.includes(':8123')) {
           findings.info.push({ id: 'port_exposure', title: 'External URL includes port 8123', desc: `Configured external URL: ${externalUrl}. Internet reachability was not tested.`, fix: 'Review firewall and reverse proxy configuration if remote access is intended.' });
         }
@@ -1121,12 +1147,12 @@ class HAConfigAuditor extends HTMLElement {
       // Fetch network interfaces from Supervisor API
       let networkInfo = [];
       try {
-        const netResp = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/network/info', method: 'get' });
+        const netResp = await callWS({ type: 'supervisor/api', endpoint: '/network/info', method: 'get' });
         networkInfo = netResp?.interfaces || netResp?.data?.interfaces || [];
       } catch(ne) { console.debug('[ha-config-auditor] caught:', ne); }
       if (networkInfo.length === 0) {
         try {
-          const netWS = await this._hass.callWS({ type: 'network' });
+          const netWS = await callWS({ type: 'network' });
           if (netWS?.adapters) {
             networkInfo = netWS.adapters.filter(a => a.enabled).map(a => ({
               interface: a.name, type: a.name.startsWith('wlan') ? 'wireless' : 'ethernet',
@@ -1137,34 +1163,37 @@ class HAConfigAuditor extends HTMLElement {
         } catch(ne2) { console.debug('[ha-config-auditor] caught:', ne2); }
       }
       try {
-        const infoResp = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/info', method: 'get' });
+        const infoResp = await callWS({ type: 'supervisor/api', endpoint: '/info', method: 'get' });
         hostInfo = infoResp || null;
       } catch(ne3) { console.debug('[ha-config-auditor] caught:', ne3); }
 
       // Fetch config entries (integrations)
       let cfgEntries = [];
       try {
-        const entries = await this._hass.callWS({type: 'config_entries/get'});
+        const entries = await callWS({type: 'config_entries/get'});
         cfgEntries = entries || [];
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
+      if (!isCurrent()) return;
       this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
     this._saveScanData();
 
     } catch(e) {
+      if (!isCurrent()) return;
       console.error('[Config Auditor] Error:', e);
       this._auditData = { error: e.message };
     }
 
+    if (!isCurrent()) return;
     this._loading = false;
     this._updateContent();
   }
 
-  async _serverAudit() {
+  async _serverAudit(callWS) {
     // Provided by the Config Auditor integration (admin-only WebSocket command).
     try {
-      return await this._hass.callWS({ type: 'ha_config_auditor/audit' });
+      return await callWS({ type: 'ha_config_auditor/audit' });
     } catch (e) {
       console.debug('[config-auditor] server checks unavailable:', e && (e.code || e.message));
       return null;
@@ -1172,7 +1201,12 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   _render() {
-    if (!this._hass) return;
+    if (this._hass?.user?.is_admin !== true) {
+      const html = `<style>${HA_CONFIG_AUDITOR_BENTO_CSS}</style><div class="card" role="status">${_esc(this._t.adminRequired)}</div>`;
+      this._lastHtml = html;
+      this.shadowRoot.innerHTML = html;
+      return;
+    }
     const html = `
       <style>${HA_CONFIG_AUDITOR_BENTO_CSS}
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
@@ -1855,6 +1889,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   _updateContent() {
+    if (this._hass?.user?.is_admin !== true) { this._render(); return; }
     const content = this.shadowRoot.getElementById('content');
     if (!content) return;
     if (this._loading) { content.innerHTML = '<div class="loading"><div class="spinner"></div>Running configuration best-practices audit...</div>'; return; }
