@@ -36,7 +36,8 @@ test('household and unresolved initial roles do not request privileged audit dat
 test('ordinary role loss removes cached user data immediately inside the render throttle', async () => {
   const f = fixture();
   try {
-    await settle(f); f.card.shadowRoot.querySelector('[data-tab="users"]').click();
+    await settle(f); f.card.hass = { ...f.hass }; await settle(f);
+    f.card.shadowRoot.querySelector('[data-tab="users"]').click();
     assert.match(f.card.shadowRoot.querySelector('.card')?.textContent || '', /QA_PRIVATE_ADMIN/);
     const reads = f.requests.length;
     f.card.hass = { ...f.hass, user: { id: 'qa-user', is_admin: false } };
