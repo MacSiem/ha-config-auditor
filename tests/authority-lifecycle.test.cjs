@@ -37,10 +37,10 @@ test('ordinary role loss removes cached user data immediately inside the render 
   const f = fixture();
   try {
     await settle(f); f.card.shadowRoot.querySelector('[data-tab="users"]').click();
-    assert.match(f.card.shadowRoot.querySelector('ha-card')?.textContent || '', /QA_PRIVATE_ADMIN/);
+    assert.match(f.card.shadowRoot.querySelector('.card')?.textContent || '', /QA_PRIVATE_ADMIN/);
     const reads = f.requests.length;
     f.card.hass = { ...f.hass, user: { id: 'qa-user', is_admin: false } };
-    assert.doesNotMatch(f.card.shadowRoot.querySelector('ha-card')?.textContent || '', /QA_PRIVATE_ADMIN/);
+    assert.doesNotMatch(f.card.shadowRoot.querySelector('.card')?.textContent || '', /QA_PRIVATE_ADMIN/);
     assert.equal(f.card._auditData, null); assert.equal(f.requests.length, reads);
   } finally { f.dom.window.close(); }
 });
@@ -53,16 +53,16 @@ test('late administrator audit response cannot repopulate data or send more read
     f.card.hass = { ...f.hass, user: { id: 'qa-user', is_admin: false } };
     release({}); await new Promise(resolve => setTimeout(resolve, 30));
     assert.equal(f.requests.length, 1); assert.equal(f.card._auditData, null);
-    assert.doesNotMatch(f.card.shadowRoot.querySelector('ha-card')?.textContent || '', /QA_PRIVATE_ADMIN/);
+    assert.doesNotMatch(f.card.shadowRoot.querySelector('.card')?.textContent || '', /QA_PRIVATE_ADMIN/);
   } finally { f.dom.window.close(); }
 });
 
 test('ordinary household language changes update the permission message without audit reads', async () => {
   const f = fixture(false);
   try {
-    await settle(f); assert.match(f.card.shadowRoot.querySelector('ha-card')?.textContent || '', /administrator/);
+    await settle(f); assert.match(f.card.shadowRoot.querySelector('.card')?.textContent || '', /administrator/);
     f.card.hass = { ...f.hass, language: 'pl' };
-    assert.match(f.card.shadowRoot.querySelector('ha-card')?.textContent || '', /administratora/);
+    assert.match(f.card.shadowRoot.querySelector('.card')?.textContent || '', /administratora/);
     assert.equal(f.requests.length, 0);
   } finally { f.dom.window.close(); }
 });
