@@ -596,11 +596,12 @@ class HAConfigAuditor extends HTMLElement {
       this.classList.toggle('bento-dark', _d);
     } catch (e) {}
     try {
-      const previousUser = this._hass?.user;
       const previousLanguage = this._lang;
       this._hass = hass;
       this._lang = (hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en';
-      const authorityChanged = previousUser?.is_admin !== hass?.user?.is_admin || previousUser?.id !== hass?.user?.id;
+      const authorityChanged = this._authorityAdmin !== hass?.user?.is_admin || this._authorityUserId !== hass?.user?.id;
+      this._authorityAdmin = hass?.user?.is_admin;
+      this._authorityUserId = hass?.user?.id;
       if (authorityChanged || hass?.user?.is_admin !== true) {
         this._auditEpoch++;
         this._auditData = null;
@@ -703,11 +704,13 @@ class HAConfigAuditor extends HTMLElement {
   async _runAudit() {
     if (this._hass?.user?.is_admin !== true) return;
     const auditHass = this._hass;
+    const auditUserId = auditHass.user.id;
+    const requestWS = auditHass.callWS.bind(auditHass);
     const epoch = ++this._auditEpoch;
-    const isCurrent = () => epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditHass.user.id;
+    const isCurrent = () => epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditUserId;
     const callWS = async message => {
       if (!isCurrent()) throw new Error('Audit authority changed');
-      const response = await auditHass.callWS(message);
+      const response = await requestWS(message);
       if (!isCurrent()) throw new Error('Audit authority changed');
       return response;
     };

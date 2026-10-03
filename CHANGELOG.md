@@ -1,5 +1,12 @@
 ## 6.0.1 (unreleased)
 
+## Unreleased — audit authority lifecycle
+
+- Remove cached audit data immediately when administrator authority or account identity changes.
+- Stop further audit reads and discard late results from the previous authority, including pending scans.
+- Require confirmed administrator permission before scanning; show the permission message in the current Home Assistant language (Polish/English).
+- Preserve an active scan across ordinary same-account Home Assistant updates and begin a fresh scan when administrator permission returns.
+
 - Keep the selected tab announced to assistive technology in sync with visible content immediately after navigation.
 - Show unavailable user inventory as N/A instead of zero when permissions, malformed responses or connection failures prevent reading it; retain measured empty and populated counts.
 
