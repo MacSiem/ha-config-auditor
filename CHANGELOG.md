@@ -2,6 +2,8 @@
 
 ## Unreleased — audit authority lifecycle
 
+- Correct first-run wording to describe the available controls and manual reference review.
+
 - Remove cached audit data immediately when administrator authority or account identity changes.
 - Stop further audit reads and discard late results from the previous authority, including pending scans.
 - Require confirmed administrator permission before scanning; show the permission message in the current Home Assistant language (Polish/English).
