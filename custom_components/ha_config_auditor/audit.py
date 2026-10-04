@@ -103,6 +103,8 @@ async def _check_auth_providers(hass: HomeAssistant) -> list[Finding]:
     providers = list(hass.auth.auth_providers)
     types = sorted({provider.type for provider in providers})
     findings: list[Finding] = []
+    if not providers:
+        return [Finding("auth_providers", STATUS_SKIPPED, "Login providers could not be assessed", "No active provider was visible when this audit ran.", evidence={"providers": types})]
     for provider in providers:
         if provider.type == "legacy_api_password":
             findings.append(
@@ -135,7 +137,7 @@ async def _check_auth_providers(hass: HomeAssistant) -> list[Finding]:
             Finding(
                 "auth_providers",
                 STATUS_PASS,
-                "Only password-based login providers are enabled",
+                "No legacy API password or trusted-network login provider detected",
                 "Enabled auth providers: " + (", ".join(types) or "none") + ".",
                 evidence={"providers": types},
             )
@@ -232,9 +234,9 @@ async def _check_transport(hass: HomeAssistant) -> list[Finding]:
         return [
             Finding(
                 "http_transport",
-                STATUS_PASS,
-                "External access uses HTTPS",
-                "The external URL uses HTTPS (TLS is terminated by a proxy or Home Assistant Cloud).",
+                STATUS_INFO,
+                "External URL is configured for HTTPS",
+                "The configured external URL uses HTTPS; this check did not test the proxy or certificate from outside the network.",
                 category="network",
                 evidence=evidence,
             )
@@ -408,7 +410,10 @@ def _scan_plaintext_secrets(config_dir: str) -> dict[str, Any]:
     matches: list[dict[str, Any]] = []
     total = 0
     scanned = 0
+    skipped_files = 0
     truncated = False
+    if not root.is_dir():
+        return {"files_scanned": 0, "files_skipped": 0, "total": 0, "matches": [], "truncated": False, "complete": False}
     for current, dirs, files in os.walk(root):
         rel_dir = Path(current).relative_to(root)
         depth = 0 if str(rel_dir) == "." else len(rel_dir.parts)
@@ -424,9 +429,11 @@ def _scan_plaintext_secrets(config_dir: str) -> dict[str, Any]:
             path = Path(current) / name
             try:
                 if path.is_symlink() or path.stat().st_size > SCAN_MAX_FILE_BYTES:
+                    skipped_files += 1
                     continue
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
+                skipped_files += 1
                 continue
             scanned += 1
             for number, line in enumerate(text.splitlines(), start=1):
@@ -446,7 +453,7 @@ def _scan_plaintext_secrets(config_dir: str) -> dict[str, Any]:
                     )
         if truncated:
             break
-    return {"files_scanned": scanned, "total": total, "matches": matches, "truncated": truncated}
+    return {"files_scanned": scanned, "files_skipped": skipped_files, "total": total, "matches": matches, "truncated": truncated, "complete": not truncated and skipped_files == 0}
 
 
 async def _check_plaintext_secrets(hass: HomeAssistant) -> list[Finding]:
@@ -459,8 +466,21 @@ async def _check_plaintext_secrets(hass: HomeAssistant) -> list[Finding]:
                 "yaml_plaintext_secrets",
                 STATUS_WARNING,
                 f"{result['total']} secret-looking value(s) written directly in YAML",
-                "Found in " + where + (f" and {more} more" if more > 0 else "") + ". Values are not shown.",
+                "Found in " + where + (f" and {more} more" if more > 0 else "") + ". Values are not shown."
+                + (" Scan incomplete; more findings may exist." if not result["complete"] else ""),
                 "Move each value to secrets.yaml and reference it with !secret.",
+                category="configuration",
+                evidence=result,
+            )
+        ]
+    if not result["complete"]:
+        return [
+            Finding(
+                "yaml_plaintext_secrets",
+                STATUS_SKIPPED,
+                "YAML secret scan incomplete",
+                f"Scan incomplete: {result['files_scanned']} file(s) checked, {result['files_skipped']} skipped, limit reached: {result['truncated']}.",
+                "Check unreadable or oversized YAML files and rerun the audit.",
                 category="configuration",
                 evidence=result,
             )
@@ -468,9 +488,9 @@ async def _check_plaintext_secrets(hass: HomeAssistant) -> list[Finding]:
     return [
         Finding(
             "yaml_plaintext_secrets",
-            STATUS_PASS,
-            "No plain-text secrets found in YAML files",
-            f"Scanned {result['files_scanned']} YAML file(s); passwords, tokens and keys use !secret.",
+            STATUS_INFO,
+            "No match in the heuristic YAML secret scan",
+            f"Scanned {result['files_scanned']} YAML file(s) in the bounded configuration scope; no matching key/value line found. This does not prove all secrets use !secret.",
             category="configuration",
             evidence=result,
         )
@@ -494,13 +514,13 @@ async def async_run_audit(hass: HomeAssistant) -> dict[str, Any]:
         try:
             findings.extend(await check(hass))
         except Exception as err:  # noqa: BLE001 - one broken check must not hide the rest
-            _LOGGER.debug("Config Auditor check %s failed", check_id, exc_info=True)
+            _LOGGER.warning("Config Auditor check %s failed (%s)", check_id, type(err).__name__)
             findings.append(
                 Finding(
                     check_id,
                     STATUS_SKIPPED,
                     "Check could not run",
-                    f"{type(err).__name__}: {err}",
+                    f"{type(err).__name__}; check did not complete.",
                 )
             )
     return {

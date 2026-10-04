@@ -157,7 +157,7 @@ async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> Non
     hass.config.external_url = "http://my-home.example.com:8123"
     assert (await audit._check_transport(hass))[0].status == "fail"
     hass.config.external_url = "https://my-home.example.com"
-    assert (await audit._check_transport(hass))[0].status == "pass"
+    assert (await audit._check_transport(hass))[0].status == "info"
     hass.config.external_url = "http://192.168.1.10:8123"
     assert (await audit._check_transport(hass))[0].status == "info"
     hass.config.external_url = None
@@ -210,6 +210,22 @@ async def test_plaintext_secret_scan_never_returns_values(hass: HomeAssistant, t
     assert "CANARY" not in repr(result)
 
 
+async def test_plaintext_secret_scan_does_not_pass_when_file_limit_truncates(hass: HomeAssistant, tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "a.yaml").write_text("sensor: []\n", encoding="utf-8")
+    (tmp_path / "b.yaml").write_text("sensor: []\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "SCAN_MAX_FILES", 1)
+    result = audit._scan_plaintext_secrets(str(tmp_path))
+    assert result["truncated"] is True
+    assert result["complete"] is False
+    async def executor(func, *args):
+        return func(*args)
+
+    fake_hass = SimpleNamespace(config=SimpleNamespace(config_dir=str(tmp_path)), async_add_executor_job=executor)
+    finding = (await audit._check_plaintext_secrets(fake_hass))[0]
+    assert finding.status == "skipped"
+    assert "incomplete" in finding.detail.lower()
+
+
 async def test_repairs_created_and_cleared(hass: HomeAssistant, monkeypatch) -> None:
     report = {
         "findings": [
@@ -237,16 +253,17 @@ async def test_repairs_created_and_cleared(hass: HomeAssistant, monkeypatch) -> 
 
 async def test_broken_check_is_reported_as_skipped(hass: HomeAssistant, monkeypatch) -> None:
     async def boom(_hass):
-        raise RuntimeError("no access")
+        raise RuntimeError("secret-CANARY")
 
     monkeypatch.setattr(audit, "CHECKS", (("auth_providers", boom),))
     report = await audit.async_run_audit(hass)
+    assert "CANARY" not in repr(report)
     assert report["findings"] == [
         {
             "id": "auth_providers",
             "status": "skipped",
             "title": "Check could not run",
-            "detail": "RuntimeError: no access",
+            "detail": "RuntimeError; check did not complete.",
             "fix": None,
             "category": "security",
             "evidence": {},

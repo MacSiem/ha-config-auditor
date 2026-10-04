@@ -21,10 +21,10 @@ them through an admin-only WebSocket command (`ha_config_auditor/audit`):
 |---|---|
 | Login providers | Enabled auth providers; `legacy_api_password` fails, `trusted_networks` warns (fails with `allow_bypass_login`) |
 | Administrator MFA | Active administrators who can log in remotely and have no MFA module enabled |
-| HTTPS | Whether HA serves TLS itself or the external URL uses HTTPS |
+| HTTPS | Whether HA serves TLS itself; an HTTPS external URL is reported as configured, without claiming the remote endpoint was probed |
 | Trusted proxies | `trusted_proxies` of the running HTTP server; `0.0.0.0/0` fails, large public ranges warn |
 | IP ban | Whether failed logins lead to an IP ban (`ip_ban_enabled` + `login_attempts_threshold`) |
-| Plain-text secrets | YAML files in the config folder with `password`/`token`/`api_key`/`secret` values not using `!secret` — reported as file, line and key; **values are never read into the result** |
+| Plain-text secrets | A bounded heuristic scan of configuration YAML for `password`/`token`/`api_key`/`secret` literals. Findings show file, line and key, never values; an incomplete scan is not a pass. No match is informational, not proof that every secret is protected. |
 
 A check that cannot run is shown as *not checked* with the reason — never as
 passed. Without the integration the card says these checks are unavailable
@@ -76,9 +76,9 @@ instead of guessing.
 |---|---|
 | ![Overview tab, light theme](docs/screenshots/card-overview-light.png) | ![Overview tab, dark theme](docs/screenshots/card-overview-dark.png) |
 
-*Overview tab: check summary (Failed / Warnings / Passed / Info), key counts
-and the Failed/Warning findings. Dark mode follows your Home Assistant theme
-automatically.*
+*Overview tab with synthetic checks: Failed, Warnings, Passed and Info counts,
+plus example findings. No household configuration appears in the image. Dark
+mode follows your Home Assistant theme.*
 
 ## Installation
 
@@ -104,6 +104,13 @@ type: custom:ha-config-auditor
 
 The integration registers the card for dashboards itself. If the card is
 already loaded from a HACS Dashboard install, it does not add a second copy.
+
+Keep your working Dashboard plugin, its resources, and existing card configuration
+while trying the integration. In storage mode the integration reuses the existing
+card resource. Check that your dashboards still work and the integration is loaded
+before retiring the plugin. The public plugin remains available until the
+integration release and migration have been verified. A category change alone
+is not a verified migration.
 
 **Options** (Settings → Devices & services → Config Auditor → Configure):
 show or hide the sidebar panel, and report failed/warning checks in
@@ -163,6 +170,14 @@ development:
 - [Buy Me a Coffee](https://buymeacoffee.com/macsiem)
 - [PayPal](https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W)
 
+The optional in-card support link is shown only to administrators. Dismiss it in the card or set `show_support: false` in the card configuration.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Privacy and data
+
+The integration reads security settings and allowed configuration files on your Home Assistant server. Audit results can reveal security weaknesses. Treat findings and YAML as private, and share only a minimal redacted reproduction. The audit itself does not modify the configuration.
+
+See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.

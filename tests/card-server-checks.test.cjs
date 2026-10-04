@@ -21,16 +21,23 @@ const REPORT = {
   ],
 };
 
-function hass(server) {
+function hass(server, config = {}, responses = {}) {
   return {
     states: {}, language: 'en', themes: { darkMode: false },
-    user: { is_admin: true }, config: { components: [], external_url: null, version: '2026.9.3' },
+    user: { is_admin: true }, config: { components: [], external_url: null, version: '2026.9.3', ...config },
     callWS: async (msg) => {
+      if (msg.type === 'supervisor/api' && Object.hasOwn(responses, msg.endpoint)) return responses[msg.endpoint];
       if (msg.type === 'ha_config_auditor/audit') {
         if (server) return server;
         const err = new Error('Unknown command.'); err.code = 'unknown_command'; throw err;
       }
-      if (msg.type === 'config/auth/list') return [{ name: 'Admin', is_owner: true, is_active: true }];
+      if (msg.type === 'config/auth/list') {
+        if (Object.hasOwn(responses, msg.type)) {
+          if (responses[msg.type] instanceof Error) throw responses[msg.type];
+          return responses[msg.type];
+        }
+        return [{ name: 'Admin', is_owner: true, is_active: true }];
+      }
       if (msg.type === 'config_entries/get') return [];
       throw new Error('not supported');
     },
@@ -40,7 +47,7 @@ function hass(server) {
   };
 }
 
-async function audit(server) {
+async function audit(server, config = {}, responses = {}) {
   const dom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/' });
   const w = dom.window;
   w.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
@@ -48,16 +55,41 @@ async function audit(server) {
   const card = w.document.createElement('ha-config-auditor');
   card.setConfig({ type: 'custom:ha-config-auditor' });
   w.document.body.appendChild(card);
-  card.hass = hass(server);
+  card.hass = hass(server, config, responses);
   for (let i = 0; i < 50 && (card._loading || !card._auditData); i++) await delay(20);
   const data = card._auditData;
   const html = card.shadowRoot.innerHTML;
   const findingsHtml = card._renderFindings(data);
+  const addonsHtml = card._renderAddonsSection(data);
+  const networkHtml = card._renderNetwork(data);
   w.close();
-  return { data, html, findingsHtml };
+  return { data, html, findingsHtml, addonsHtml, networkHtml };
 }
 
 const ids = (list) => list.map((f) => f.id);
+
+test('selected tab follows the visible content immediately after navigation', async () => {
+  const { data } = await audit(null, {}, { 'config/auth/list': new Error('unauthorized') });
+  const dom = new JSDOM('<!DOCTYPE html><body></body>', { runScripts: 'dangerously', url: 'http://localhost/' });
+  try {
+    dom.window.eval(CARD);
+    const card = dom.window.document.createElement('ha-config-auditor');
+    card.setConfig({ type: 'custom:ha-config-auditor' });
+    dom.window.document.body.appendChild(card);
+    card._hass = hass(null);
+    card._loading = false;
+    card._auditData = data;
+    card._render();
+    for (const tab of ['users', 'tips', 'overview']) {
+      const button = card.shadowRoot.querySelector(`[data-tab="${tab}"]`);
+      button.click();
+      assert.equal(button.getAttribute('aria-selected'), 'true');
+      assert.equal(card.shadowRoot.querySelectorAll('[role="tab"][aria-selected="true"]').length, 1);
+      assert.equal(card._activeTab, tab);
+      if (tab === 'users') assert.match(card.shadowRoot.getElementById('content').textContent, /User accounts are unavailable/);
+    }
+  } finally { dom.window.close(); }
+});
 
 test('server findings are placed by status and marked as server-verified', async () => {
   const { data, findingsHtml } = await audit(REPORT);
@@ -82,4 +114,59 @@ test('without the integration nothing about auth or HTTP is guessed', async () =
 test('the integration ships the same card as the plugin', () => {
   const www = fs.readFileSync(path.join(ROOT, 'custom_components/ha_config_auditor/www/ha-config-auditor.js'), 'utf8');
   assert.equal(www, CARD);
+});
+
+test('configured external HTTPS URL is not reported as a verified connection', async () => {
+  const { data } = await audit(null, { external_url: 'https://example.invalid' });
+  assert.ok(!ids(data.findings.pass).includes('ssl_external'));
+  assert.ok(ids(data.findings.info).includes('ssl_external'));
+});
+
+test('Supervisor installed addon summaries do not require an installed flag', async () => {
+  const addons = Array.from({ length: 21 }, (_, i) => ({ slug: `qa_${i}`, name: `QA ${i}`, version: '1.0', state: 'started', update_available: false }));
+  const { data, addonsHtml, networkHtml } = await audit(REPORT, {}, { '/addons': { addons } });
+  assert.equal(data.addons.length, 21, 'real /addons response already lists installed addons');
+  assert.ok(!addonsHtml.includes('On</td>'), 'missing protection/auto-update must not be claimed enabled');
+  assert.ok((addonsHtml.match(/N\/A/g) || []).length >= 63, 'missing protection, auto-update and host-network must be unknown');
+  assert.ok(!networkHtml.includes('No addons exposing ports'), 'missing port inventory cannot prove no exposure');
+});
+
+test('unavailable addon inventory differs from a measured empty inventory', async () => {
+  const missing = await audit(REPORT, {}, { '/os/info': { version: '1.0' } });
+  assert.ok(missing.addonsHtml.includes('unavailable'));
+  assert.ok(!missing.addonsHtml.includes('No addons installed'));
+  const empty = await audit(REPORT, {}, { '/addons': { addons: [] } });
+  assert.ok(empty.addonsHtml.includes('No addons installed'));
+  assert.ok(empty.networkHtml.includes('No addons exposing ports'));
+});
+
+test('explicit false addon metadata remains a measured disabled value', async () => {
+  const { addonsHtml } = await audit(REPORT, {}, { '/addons': { addons: [{ slug: 'qa', name: 'QA', version: '1.0', state: 'started', protected: false, auto_update: false, host_network: false, network: {} }] } });
+  assert.ok(addonsHtml.includes('Off</td>'));
+  assert.ok(addonsHtml.includes('No</td>'));
+  assert.ok(!addonsHtml.includes('N/A'));
+});
+
+
+test('denied or malformed user inventory never reports a measured zero', async () => {
+  for (const response of [new Error('unauthorized'), null, { error: 'unavailable' }]) {
+    const { data, html } = await audit(null, {}, { 'config/auth/list': response });
+    const dom = new JSDOM(html);
+    const label = [...dom.window.document.querySelectorAll('div')].find(el => el.textContent === 'User accounts unavailable');
+    assert.ok(label, 'missing account inventory must be explicit');
+    assert.equal(label.previousElementSibling.textContent, 'N/A');
+    assert.ok(ids(data.findings.info).includes('user_inventory_unavailable'));
+    dom.window.close();
+  }
+});
+
+test('a measured empty or populated user inventory retains its actual count', async () => {
+  for (const [response, count] of [[[], '0'], [[{ name: 'QA', is_active: true }], '1']]) {
+    const { html } = await audit(null, {}, { 'config/auth/list': response });
+    const dom = new JSDOM(html);
+    const label = [...dom.window.document.querySelectorAll('div')].find(el => el.textContent === 'User accounts');
+    assert.ok(label);
+    assert.equal(label.previousElementSibling.textContent, count);
+    dom.window.close();
+  }
 });

@@ -1,3 +1,24 @@
+## 6.0.1 (unreleased)
+
+## Unreleased — audit authority lifecycle
+
+- Correct first-run wording to describe the available controls and manual reference review.
+
+- Remove cached audit data immediately when administrator authority or account identity changes.
+- Stop further audit reads and discard late results from the previous authority, including pending scans.
+- Require confirmed administrator permission before scanning; show the permission message in the current Home Assistant language (Polish/English).
+- Preserve an active scan across ordinary same-account Home Assistant updates and begin a fresh scan when administrator permission returns.
+
+- Keep the selected tab announced to assistive technology in sync with visible content immediately after navigation.
+- Show unavailable user inventory as N/A instead of zero when permissions, malformed responses or connection failures prevent reading it; retain measured empty and populated counts.
+
+- Allow wide add-on tables to scroll within narrow cards so all metadata columns remain accessible.
+- Read installed add-ons from the Supervisor inventory without requiring an absent installed flag; show unavailable inventory and missing protection, auto-update, host-network and port metadata explicitly.
+- Security: incomplete YAML scans and browser heuristics no longer report a verified PASS; HTTPS configured in a URL is not presented as a tested endpoint.
+- Security: failed audit exception details are redacted from logs.
+- UI: support prompts are optional and visible only to administrators; current light and dark screenshots reflect the corrected findings.
+- Tests: Home Assistant runtime coverage includes the minimum supported version and current/beta Core.
+
 ## 6.0.0 (2026-09-24)
 
 - New: **Config Auditor integration** (`custom_components/ha_config_auditor`). It verifies on the server what a browser card cannot read: enabled login providers (`legacy_api_password`, `trusted_networks` with or without login bypass), administrators without two-factor authentication, HTTPS, `trusted_proxies`, IP ban after failed logins, and plain-text secrets in YAML files (reported as file, line and key only; values are never returned).
