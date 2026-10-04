@@ -2,6 +2,8 @@
 
 ## Unreleased — audit authority lifecycle
 
+- Translate first-run guidance and optional support labels during ordinary Polish/English locale updates; preserve dismissal choices and existing audit results.
+
 - Correct first-run wording to describe the available controls and manual reference review.
 
 - Remove cached audit data immediately when administrator authority or account identity changes.

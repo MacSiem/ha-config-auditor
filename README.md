@@ -181,3 +181,5 @@ MIT, see [LICENSE](LICENSE).
 The integration reads security settings and allowed configuration files on your Home Assistant server. Audit results can reveal security weaknesses. Treat findings and YAML as private, and share only a minimal redacted reproduction. The audit itself does not modify the configuration.
 
 See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
+
+First-run guidance and optional support labels follow the Home Assistant language (Polish or English, including Polish regional locales). Switching language preserves the selected tab, authored title and dismissal choices, and does not trigger another audit. The Findings and Tips names in the guidance match the current tab labels.
