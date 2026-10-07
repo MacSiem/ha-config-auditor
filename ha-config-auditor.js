@@ -1881,7 +1881,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         <div class="card">
           <div class="card-header">
             <h2>${_esc(this._config.title || '')}</h2>
-            <!-- Refresh handled by panel toolbar -->
+            <button type="button" class="audit-refresh">${_esc(this._t.refresh)}</button>
           </div>
           <div class="tabs" role="tablist">
             <button class="tab-button ${this._activeTab === 'overview' ? 'active' : ''}" data-tab="overview" role="tab" aria-selected="${this._activeTab === 'overview'}">Overview</button>
@@ -1917,13 +1917,20 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       });
     });
 
-    // Refresh now handled by panel toolbar (removed internal Re-scan button)
+    this.shadowRoot.querySelector('.audit-refresh').addEventListener('click', () => {
+      if (this._loading) return;
+      this._lastAuditTime = Date.now();
+      this._runAudit();
+    });
+    this._updateContent();
   }
 
   _updateContent() {
     if (this._hass?.user?.is_admin !== true) { this._render(); return; }
     const content = this.shadowRoot.getElementById('content');
     if (!content) return;
+    const refresh = this.shadowRoot.querySelector('.audit-refresh');
+    if (refresh) { refresh.disabled = this._loading; refresh.textContent = this._t.refresh; }
     if (this._loading) { content.innerHTML = '<div class="loading"><div class="spinner"></div>Running configuration best-practices audit...</div>'; return; }
     if (!this._auditData || this._auditData.error) { content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._auditData?.error || 'Audit failed')}</div>`; return; }
     const d = this._auditData;
@@ -2204,7 +2211,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   disconnectedCallback() {
-    // Cleanup any active event listeners or timers
+    this._auditEpoch++;
+    this._loading = false;
+    this._firstHassRender = false;
   }
 
   setActiveTab(tabId) {
