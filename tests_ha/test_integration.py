@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from ipaddress import ip_network
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +18,8 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ha_config_auditor import audit
+from custom_components.ha_config_auditor import websocket_api as auditor_ws
+from custom_components.ha_config_auditor import frontend as auditor_frontend
 from custom_components.ha_config_auditor.const import (
     CARD_URL,
     CONF_CREATE_REPAIRS,
@@ -110,6 +113,21 @@ async def test_remove_entry_removes_own_resource(hass: HomeAssistant) -> None:
     assert list(hass.data["lovelace"].resources.async_items()) == []
 
 
+async def test_yaml_fallback_removes_only_owned_module_on_unload(hass: HomeAssistant, monkeypatch) -> None:
+    monkeypatch.setattr(auditor_frontend, "_lovelace_mode", lambda _hass: "yaml")
+    entry = await _setup(hass)
+    modules = hass.data[frontend.DATA_EXTRA_MODULE_URL]
+    owned = f"{CARD_URL}?v={VERSION}"
+    assert owned in modules.urls
+    frontend.add_extra_js_url(hass, "/local/foreign-module.js")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert owned not in modules.urls
+    assert "/local/foreign-module.js" in modules.urls
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert owned in modules.urls
+
+
 async def test_ws_audit_is_admin_only(hass: HomeAssistant, hass_ws_client, hass_read_only_access_token) -> None:
     await _setup(hass)
     client = await hass_ws_client(hass, hass_read_only_access_token)
@@ -152,12 +170,78 @@ async def test_trusted_proxies_classification(hass: HomeAssistant) -> None:
     assert (await audit._check_trusted_proxies(hass))[0].status == "pass"
 
 
+async def test_narrow_public_proxy_is_described_honestly(hass: HomeAssistant) -> None:
+    hass.http = SimpleNamespace(trusted_proxies=[ip_network("8.8.8.8/32")], app={})
+    finding = (await audit._check_trusted_proxies(hass))[0]
+    assert finding.status == "pass"
+    assert "private" not in finding.title.lower()
+    assert finding.evidence["trusted_proxies"] == ["8.8.8.8/32"]
+
+
+async def test_ws_audit_rejects_unloaded_integration(hass: HomeAssistant, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
+    msg = await client.receive_json()
+    assert msg["success"] is False
+    assert msg["error"]["code"] == "unavailable"
+
+
+async def test_ws_discards_pending_audit_after_unload(hass: HomeAssistant, hass_ws_client, monkeypatch) -> None:
+    entry = await _setup(hass)
+    started, resume = asyncio.Event(), asyncio.Event()
+
+    async def delayed(_hass):
+        started.set()
+        await resume.wait()
+        return {"findings": [{"title": "Synthetic private audit"}]}
+
+    monkeypatch.setattr(auditor_ws, "async_run_audit", delayed)
+    client = await hass_ws_client(hass)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
+    await started.wait()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    resume.set()
+    msg = await client.receive_json()
+    assert msg["success"] is False
+    assert msg["error"]["code"] == "unavailable"
+    assert "Synthetic private audit" not in repr(msg)
+
+
+async def test_ws_discards_pending_audit_after_admin_loss(hass: HomeAssistant, hass_ws_client, hass_admin_user, monkeypatch) -> None:
+    await _setup(hass)
+    started, resume = asyncio.Event(), asyncio.Event()
+
+    async def delayed(_hass):
+        started.set()
+        await resume.wait()
+        return {"findings": [{"title": "Synthetic private audit"}]}
+
+    monkeypatch.setattr(auditor_ws, "async_run_audit", delayed)
+    client = await hass_ws_client(hass)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
+    await started.wait()
+    original = hass_admin_user.groups
+    try:
+        hass_admin_user.groups = []
+        hass_admin_user.invalidate_cache()
+        resume.set()
+        msg = await client.receive_json()
+        assert msg["success"] is False
+        assert msg["error"]["code"] == "unauthorized"
+        assert "Synthetic private audit" not in repr(msg)
+    finally:
+        hass_admin_user.groups = original
+        hass_admin_user.invalidate_cache()
+
+
 async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> None:
     hass.config.api = SimpleNamespace(use_ssl=False)
     hass.config.external_url = "http://my-home.example.com:8123"
     assert (await audit._check_transport(hass))[0].status == "fail"
     hass.config.external_url = "https://my-home.example.com"
-    assert (await audit._check_transport(hass))[0].status == "pass"
+    assert (await audit._check_transport(hass))[0].status == "info"
     hass.config.external_url = "http://192.168.1.10:8123"
     assert (await audit._check_transport(hass))[0].status == "info"
     hass.config.external_url = None
@@ -210,6 +294,22 @@ async def test_plaintext_secret_scan_never_returns_values(hass: HomeAssistant, t
     assert "CANARY" not in repr(result)
 
 
+async def test_plaintext_secret_scan_does_not_pass_when_file_limit_truncates(hass: HomeAssistant, tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "a.yaml").write_text("sensor: []\n", encoding="utf-8")
+    (tmp_path / "b.yaml").write_text("sensor: []\n", encoding="utf-8")
+    monkeypatch.setattr(audit, "SCAN_MAX_FILES", 1)
+    result = audit._scan_plaintext_secrets(str(tmp_path))
+    assert result["truncated"] is True
+    assert result["complete"] is False
+    async def executor(func, *args):
+        return func(*args)
+
+    fake_hass = SimpleNamespace(config=SimpleNamespace(config_dir=str(tmp_path)), async_add_executor_job=executor)
+    finding = (await audit._check_plaintext_secrets(fake_hass))[0]
+    assert finding.status == "skipped"
+    assert "incomplete" in finding.detail.lower()
+
+
 async def test_repairs_created_and_cleared(hass: HomeAssistant, monkeypatch) -> None:
     report = {
         "findings": [
@@ -237,16 +337,17 @@ async def test_repairs_created_and_cleared(hass: HomeAssistant, monkeypatch) -> 
 
 async def test_broken_check_is_reported_as_skipped(hass: HomeAssistant, monkeypatch) -> None:
     async def boom(_hass):
-        raise RuntimeError("no access")
+        raise RuntimeError("secret-CANARY")
 
     monkeypatch.setattr(audit, "CHECKS", (("auth_providers", boom),))
     report = await audit.async_run_audit(hass)
+    assert "CANARY" not in repr(report)
     assert report["findings"] == [
         {
             "id": "auth_providers",
             "status": "skipped",
             "title": "Check could not run",
-            "detail": "RuntimeError: no access",
+            "detail": "RuntimeError; check did not complete.",
             "fix": None,
             "category": "security",
             "evidence": {},

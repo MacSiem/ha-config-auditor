@@ -1,4 +1,4 @@
-/* HA Tools split — ha-config-auditor v6.0.0 (2026-09-24) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v6.0.1 (2026-09-24) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -507,28 +507,32 @@ pre {
 const _LOCAL_INTRO_KEY = 'ha-intro-dismissed-ha-config-auditor';
 const _LOCAL_INTRO = {
   headline: "Configuration best-practices audit with remediation tips.",
-  steps: ["Overview shows passed, warning, and failed check counts.","Click a finding row for step-by-step remediation.","Tips tab — checklist of best practices."]
+  steps: ["Overview shows passed, warning, and failed check counts.","Read each finding and its suggested fix in the Findings tab.","Tips tab — checklist of best practices."]
 };
-const _LOCAL_DONATE_HTML = ''
-  + '<div class="donate-section" data-source="ha-config-auditor">'
-  + '  <div class="donate-text">'
-  + '    <h3>❤️ Support HA Tools Development</h3>'
-  + '    <p>If this tool makes your Home Assistant life easier, consider supporting the project. Every coffee motivates further development!</p>'
-  + '  </div>'
-  + '  <div class="donate-buttons">'
-  + '    <a class="donate-btn coffee" href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer">☕ Buy Me a Coffee</a>'
-  + '    <a class="donate-btn paypal" href="https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W" target="_blank" rel="noopener noreferrer">💳 PayPal</a>'
-  + '  </div>'
-  + '</div>';
+const _LOCAL_INTRO_PL = {
+  headline: 'Przegląd konfiguracji i wskazówki dotyczące dobrych praktyk.',
+  steps: ['Przegląd pokazuje liczbę pozytywnych wyników, ostrzeżeń i problemów.', 'W zakładce Findings przeczytaj każdy wynik i wskazówkę jego poprawy.', 'Zakładka Tips zawiera listę dobrych praktyk.']
+};
+const _LOCAL_SUPPORT_KEY = 'ha-config-auditor-support-dismissed';
+const _LOCAL_DONATE_HTML = '<div class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">Optional support for HA Tools</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;padding:2px 6px;min-height:0;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></div>';
+function _renderLocalSupport(language) {
+  return language === 'pl' ? _LOCAL_DONATE_HTML
+    .replace('Optional support for HA Tools', 'Dobrowolne wsparcie HA Tools')
+    .replace('Dismiss support link', 'Ukryj link wsparcia') : _LOCAL_DONATE_HTML;
+}
+function _localSupportDismissed() { try { return localStorage.getItem(_LOCAL_SUPPORT_KEY) === '1'; } catch (_) { return false; } }
+function _bindLocalSupportDismiss(root) { root.querySelector('.support-dismiss')?.addEventListener('click', () => { try { localStorage.setItem(_LOCAL_SUPPORT_KEY, '1'); } catch (_) {} root.querySelector('.donate-section[data-source="own-card"]')?.remove(); }); }
 function _localIntroDismissed() {
   try { return localStorage.getItem(_LOCAL_INTRO_KEY) === '1'; } catch(e) { return false; }
 }
-function _renderLocalIntro() {
+function _renderLocalIntro(language) {
   if (_localIntroDismissed()) return '';
-  const steps = _LOCAL_INTRO.steps.map(step => '<li>' + _esc(step) + '</li>').join('');
+  const intro = language === 'pl' ? _LOCAL_INTRO_PL : _LOCAL_INTRO;
+  const dismiss = language === 'pl' ? 'Ukryj instrukcję' : 'Dismiss';
+  const steps = intro.steps.map(step => '<li>' + _esc(step) + '</li>').join('');
   return '<div class="intro-banner" data-intro="ha-config-auditor">'
-    + '<button class="intro-dismiss" type="button" title="Dismiss" aria-label="Dismiss">✕</button>'
-    + '<div class="intro-headline">💡 ' + _esc(_LOCAL_INTRO.headline) + '</div>'
+    + '<button class="intro-dismiss" type="button" title="' + _esc(dismiss) + '" aria-label="' + _esc(dismiss) + '">✕</button>'
+    + '<div class="intro-headline">💡 ' + _esc(intro.headline) + '</div>'
     + '<ol class="intro-steps">' + steps + '</ol>'
     + '</div>';
 }
@@ -546,7 +550,7 @@ function _bindLocalIntroDismiss(root) {
 class HAConfigAuditor extends HTMLElement {
   static getConfigElement() { return document.createElement('ha-config-auditor-editor'); }
   getCardSize() { return 6; }
-  getGridOptions() { return { rows: 6, columns: 12, min_rows: 3, min_columns: 6 }; }
+  getGridOptions() { return { columns: 12, min_rows: 3, min_columns: 6 }; }
 
   static getStubConfig() { return { type: 'custom:ha-config-auditor', title: 'Config Auditor' }; }
   constructor() {
@@ -569,6 +573,7 @@ class HAConfigAuditor extends HTMLElement {
     this._lastScan = null;
     this._lastHtml = '';
     this._lastAuditTime = 0;
+    this._auditEpoch = 0;
   }
 
   // -- Persistence --
@@ -602,12 +607,26 @@ class HAConfigAuditor extends HTMLElement {
       this.classList.toggle('bento-dark', _d);
     } catch (e) {}
     try {
+      const previousLanguage = this._lang;
       this._hass = hass;
+      this._lang = (hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en';
+      const authorityChanged = this._authorityAdmin !== hass?.user?.is_admin || this._authorityUserId !== hass?.user?.id;
+      this._authorityAdmin = hass?.user?.is_admin;
+      this._authorityUserId = hass?.user?.id;
+      if (authorityChanged || hass?.user?.is_admin !== true) {
+        this._auditEpoch++;
+        this._auditData = null;
+        this._loading = false;
+        this._firstHassRender = false;
+        this._lastHtml = '';
+        this._currentPage = {};
+      }
       if (!this._config) this._config = { title: 'Config Auditor' };
-      if (!hass) return;
+      if (hass?.user?.is_admin !== true) { this._render(); return; }
       const now = Date.now();
       if (!this._firstHassRender) {
         this._firstHassRender = true;
+        this._lastAuditTime = now;
         this._runAudit();
         this._render();
         this._lastRenderTime = now;
@@ -618,6 +637,7 @@ class HAConfigAuditor extends HTMLElement {
         this._lastAuditTime = now;
         this._runAudit();
       }
+      if (previousLanguage !== this._lang) this._updateLocale();
       // Throttle render to 60s — audit results are static
       if (now - (this._lastRenderTime || 0) < 60000) {
         return;
@@ -640,6 +660,7 @@ class HAConfigAuditor extends HTMLElement {
         save: 'Zapisz',
         cancel: 'Anuluj',
         locale: 'pl-PL',
+        adminRequired: 'Audyt konfiguracji wymaga uprawnień administratora.',
       },
       en: {
         title: 'Config Auditor',
@@ -650,15 +671,37 @@ class HAConfigAuditor extends HTMLElement {
         save: 'Save',
         cancel: 'Cancel',
         locale: 'en-US',
+        adminRequired: 'Configuration audit requires administrator permissions.',
       },
     };
     return T[this._lang] || T.en;
+  }
+
+  _updateLocale() {
+    const refresh = this.shadowRoot.querySelector('.audit-refresh');
+    if (refresh) refresh.textContent = this._t.refresh;
+    const intro = this._lang === 'pl' ? _LOCAL_INTRO_PL : _LOCAL_INTRO;
+    const banner = this.shadowRoot.querySelector('.intro-banner[data-intro="ha-config-auditor"]');
+    if (banner) {
+      banner.querySelector('.intro-headline').textContent = '💡 ' + intro.headline;
+      banner.querySelectorAll('.intro-steps li').forEach((item, index) => { item.textContent = intro.steps[index]; });
+      const dismiss = this._lang === 'pl' ? 'Ukryj instrukcję' : 'Dismiss';
+      const button = banner.querySelector('.intro-dismiss');
+      button.title = dismiss;
+      button.setAttribute('aria-label', dismiss);
+    }
+    const support = this.shadowRoot.querySelector('.donate-section[data-source="own-card"]');
+    if (support) {
+      support.querySelector('a').textContent = this._lang === 'pl' ? 'Dobrowolne wsparcie HA Tools' : 'Optional support for HA Tools';
+      support.querySelector('.support-dismiss').setAttribute('aria-label', this._lang === 'pl' ? 'Ukryj link wsparcia' : 'Dismiss support link');
+    }
   }
 
   setConfig(config) {
     const cfg = config || {};
     this._config = { title: cfg.title || 'Config Auditor', ...cfg };
     this._loadScanData();
+    if (this._hass) { this._lastHtml = ''; this._render(); }
   }
 
   // HTML escape — protects against XSS when interpolating user-controllable strings into innerHTML.
@@ -690,7 +733,18 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   async _runAudit() {
-    if (!this._hass) return;
+    if (this._hass?.user?.is_admin !== true) return;
+    const auditHass = this._hass;
+    const auditUserId = auditHass.user.id;
+    const requestWS = auditHass.callWS.bind(auditHass);
+    const epoch = ++this._auditEpoch;
+    const isCurrent = () => epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditUserId;
+    const callWS = async message => {
+      if (!isCurrent()) throw new Error('Audit authority changed');
+      const response = await requestWS(message);
+      if (!isCurrent()) throw new Error('Audit authority changed');
+      return response;
+    };
     this._loading = true;
     this._updateContent();
 
@@ -700,15 +754,15 @@ class HAConfigAuditor extends HTMLElement {
 
     try {
       let hostInfo = null, osInfo = null, supervisorInfo = null, coreInfo = null;
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/host/info', method: 'get' }); hostInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/os/info', method: 'get' }); osInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/supervisor/info', method: 'get' }); supervisorInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
-      try { const r = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/core/info', method: 'get' }); coreInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/host/info', method: 'get' }); hostInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/os/info', method: 'get' }); osInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/supervisor/info', method: 'get' }); supervisorInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
+      try { const r = await callWS({ type: 'supervisor/api', endpoint: '/core/info', method: 'get' }); coreInfo = r?.data || r; } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // Detect non-supervised HA installation
       if (!hostInfo && !osInfo && !supervisorInfo && !coreInfo) {
         const L = this._lang === 'pl';
-        findings.info.push({ id: 'no_supervisor', title: L ? 'Brak Supervisor API' : 'No Supervisor API detected', desc: L ? 'Cz\u0119\u015B\u0107 sprawdze\u0144 konfiguracji wymaga HA OS lub HA Supervised (aktualizacje systemu, skanowanie dodatk\u00F3w, analiza sieci).' : 'Some configuration checks require HA OS or Supervised installation (system updates, addon scanning, network analysis).', fix: L ? 'Zainstaluj Home Assistant OS dla pe\u0142nego zakresu audytu' : 'Install HA OS for full configuration audit coverage' });
+        findings.info.push({ id: 'no_supervisor', title: L ? 'Supervisor API niedostępne' : 'Supervisor API unavailable', desc: L ? 'Nie sprawdzono aktualizacji systemu, dodatków ani sieci Supervisor. Powodem może być wariant instalacji albo brak uprawnień.' : 'System updates, add-ons and Supervisor network checks were not run. The installation type or account permissions may explain this.', fix: L ? 'Sprawdź typ instalacji i uprawnienia konta' : 'Check installation type and account permissions' });
       }
 
       if (coreInfo) {
@@ -716,16 +770,20 @@ class HAConfigAuditor extends HTMLElement {
         const latest = coreInfo.version_latest;
         if (current && latest && current !== latest) {
           findings.warning.push({ id: 'core_update', title: 'HA Core update available', desc: `Current: ${current} \u2192 Latest: ${latest}`, fix: 'Update via Settings \u2192 System \u2192 Updates' });
-        } else if (current) {
+        } else if (current && latest && current === latest) {
           findings.pass.push({ id: 'core_update', title: 'HA Core is up to date', desc: `Version: ${current}` });
+        } else if (current) {
+          findings.info.push({ id: 'core_update', title: 'HA Core update status not checked', desc: `Current version: ${current}; latest version unavailable` });
         }
       }
 
       if (supervisorInfo) {
-        if (supervisorInfo.version !== supervisorInfo.version_latest) {
+        if (supervisorInfo.version && supervisorInfo.version_latest && supervisorInfo.version !== supervisorInfo.version_latest) {
           findings.warning.push({ id: 'supervisor_update', title: 'Supervisor update available', desc: `Current: ${supervisorInfo.version} \u2192 Latest: ${supervisorInfo.version_latest}`, fix: 'Update the Supervisor from System settings' });
-        } else {
+        } else if (supervisorInfo.version && supervisorInfo.version_latest) {
           findings.pass.push({ id: 'supervisor_update', title: 'Supervisor is up to date', desc: `Version: ${supervisorInfo.version}` });
+        } else {
+          findings.info.push({ id: 'supervisor_update', title: 'Supervisor update status not checked', desc: 'Version comparison data is incomplete.' });
         }
       }
 
@@ -738,12 +796,16 @@ class HAConfigAuditor extends HTMLElement {
       }
 
       let addons = [];
+      let addonsAvailable = false;
       try {
-        const addonList = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' });
-        addons = addonList?.addons || addonList?.data?.addons || [];
+        const addonList = await callWS({ type: 'supervisor/api', endpoint: '/addons', method: 'get' });
+        const inventory = addonList?.addons ?? addonList?.data?.addons;
+        addonsAvailable = Array.isArray(inventory);
+        addons = addonsAvailable ? inventory : [];
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      const installedAddons = addons.filter(a => a.installed);
+      // /addons lists installed add-ons without an `installed` flag.
+      const installedAddons = addons.filter(a => a.installed !== false);
 
       const outdatedAddons = installedAddons.filter(a => a.update_available);
       if (outdatedAddons.length > 0) {
@@ -767,21 +829,21 @@ class HAConfigAuditor extends HTMLElement {
         findings.info.push({ id: 'auto_update', title: `${noAutoUpdate.length} addon(s) without auto-update`, desc: noAutoUpdate.map(a => (a.name)).join(', '), fix: 'Consider enabling auto-update for non-critical addons' });
       }
 
-      const configEntries = this._hass.config;
+      const configEntries = auditHass.config;
       const externalUrl = configEntries?.external_url || '';
       if (externalUrl) {
         if (externalUrl.startsWith('https://')) {
-          findings.pass.push({ id: 'ssl_external', title: 'External access uses HTTPS', desc: `External URL: ${externalUrl}` });
+          findings.info.push({ id: 'ssl_external', title: 'External URL is configured for HTTPS', desc: `Configured URL: ${externalUrl}. The remote endpoint and certificate were not tested.` });
         } else if (externalUrl.startsWith('http://')) {
-          findings.critical.push({ id: 'ssl_external', title: 'External access without SSL!', desc: `External URL uses plain HTTP: ${externalUrl}`, fix: 'Configure SSL/TLS for external access via NGINX, Cloudflare tunnel, or DuckDNS addon' });
+          findings.warning.push({ id: 'ssl_external', title: 'External URL is configured for HTTP', desc: `Configured URL: ${externalUrl}. Remote reachability was not tested.`, fix: 'If this URL is reachable outside your trusted network, configure HTTPS.' });
         }
       } else {
-        findings.info.push({ id: 'ssl_external', title: 'No external URL configured', desc: 'HA is only accessible locally (or external access not configured in HA)', fix: 'If you access HA remotely, configure external_url in configuration.yaml' });
+        findings.info.push({ id: 'ssl_external', title: 'No external URL configured', desc: 'Remote reachability was not tested.', fix: 'Review remote access separately if you use it.' });
       }
 
       const internalUrl = configEntries?.internal_url || '';
       if (internalUrl && internalUrl.startsWith('https://')) {
-        findings.pass.push({ id: 'ssl_internal', title: 'Internal access uses HTTPS', desc: `Internal URL: ${internalUrl}` });
+        findings.info.push({ id: 'ssl_internal', title: 'Internal URL is configured for HTTPS', desc: `Configured URL: ${internalUrl}. The certificate was not tested.` });
       }
 
       // K1: Certificate & DNS best-practice checks
@@ -789,7 +851,7 @@ class HAConfigAuditor extends HTMLElement {
         try {
           const hostname = new URL(externalUrl).hostname;
           if (hostname.endsWith('.duckdns.org') || hostname.endsWith('.nabu.casa')) {
-            findings.pass.push({ id: 'ssl_cert_managed', title: 'SSL certificate is auto-managed', desc: `${hostname} uses managed SSL (auto-renewed)` });
+            findings.info.push({ id: 'ssl_cert_managed', title: 'Managed SSL provider domain detected', desc: `${hostname} is configured. Certificate status and renewal were not checked.` });
           } else {
             findings.info.push({ id: 'ssl_cert_check', title: 'Verify SSL certificate expiry', desc: `Hostname: ${hostname} — ensure your cert is auto-renewed (Let''s Encrypt, Cloudflare, etc.)`, fix: 'Use certbot with auto-renewal or a Cloudflare tunnel for hassle-free SSL' });
           }
@@ -798,10 +860,13 @@ class HAConfigAuditor extends HTMLElement {
 
 
       let users = [];
+      let usersAvailable = false;
       try {
-        const userList = await this._hass.callWS({ type: 'config/auth/list' });
-        users = userList || [];
+        const userList = await callWS({ type: 'config/auth/list' });
+        if (Array.isArray(userList)) { users = userList; usersAvailable = true; }
       } catch(e) { console.debug('[config-auditor]', e.message); }
+
+      if (!usersAvailable) findings.info.push({ id: 'user_inventory_unavailable', title: 'User accounts not checked', desc: 'The user inventory is unavailable. Check account permissions or retry as an administrator.' });
 
       if (users.length > 0) {
         const activeUsers = users.filter(u => u.is_active !== false);
@@ -818,7 +883,7 @@ class HAConfigAuditor extends HTMLElement {
         }
       }
 
-      const states = this._hass.states;
+      const states = auditHass.states;
       const allEntities = Object.keys(states || {});
 
       const shellEntities = allEntities.filter(e => e.startsWith('shell_command.'));
@@ -861,15 +926,22 @@ class HAConfigAuditor extends HTMLElement {
         findings.info.push({ id: 'port_exposure', title: `${portExposingAddons.length} addon(s) expose host ports`, desc: portExposingAddons.map(a => (a.name) + ': ' + Object.entries(a.ports || {}).filter(([, c]) => c?.host_port).map(([p, c]) => p + '\u2192' + c.host_port).join(', ')).join('; '), fix: 'Verify each exposed port is necessary. Use Ingress when available to avoid port exposure.' });
       }
 
-      // Long-lived access tokens check
+      // The supported endpoint exposes metadata for the current account only.
+      // Retain only a count by explicit token type; never persist token metadata.
       try {
-        const llat = await this._hass.callWS({ type: 'auth/long_lived_access_token/list' }).catch(() => []);
-        if (llat && llat.length > 5) {
-          findings.warning.push({ id: 'many_tokens', title: `${llat.length} long-lived access tokens`, desc: 'Many active access tokens increase attack surface', fix: 'Review and revoke unused tokens at Profile \u2192 Long-lived access tokens' });
-        } else if (llat && llat.length > 0) {
-          findings.info.push({ id: 'access_tokens', title: `${llat.length} long-lived access token(s)`, desc: 'Review periodically for unused tokens' });
-        }
-      } catch(e) { console.debug('[config-auditor]', e.message); }
+        const metadata = await callWS({ type: 'auth/refresh_tokens' });
+        const types = new Set(['normal', 'system', 'long_lived_access_token']);
+        if (!Array.isArray(metadata) || !metadata.every(t => t && types.has(t.type))) throw new TypeError('Unexpected token metadata');
+        const count = metadata.filter(t => t.type === 'long_lived_access_token').length;
+        findings[count > 5 ? 'warning' : 'info'].push({
+          id: count > 5 ? 'many_tokens' : 'access_tokens',
+          title: `${count} long-lived access token(s) for the current account`,
+          desc: 'Only the current account token types were counted. Other users were not checked; ordinary login sessions are excluded.',
+          fix: 'Review unused tokens in your Profile. Token values were not read or stored.'
+        });
+      } catch(e) {
+        findings.info.push({ id: 'access_tokens_unavailable', title: 'Long-lived access tokens not checked', desc: 'Current-account token metadata is unavailable or unsupported. Other users were not checked. Review tokens manually in your Profile.' });
+      }
 
       // Camera exposure check
       const cameraEntities = allEntities.filter(e => e.startsWith('camera.'));
@@ -897,7 +969,7 @@ class HAConfigAuditor extends HTMLElement {
       // Server-verified checks (Config Auditor integration). These replace the
       // earlier browser-side guesses about auth providers, IP bans and HTTP
       // settings, which the frontend cannot actually read.
-      const server = await this._serverAudit();
+      const server = await this._serverAudit(callWS);
       if (server && Array.isArray(server.findings)) {
         const bucketFor = { fail: 'critical', warning: 'warning', info: 'info', pass: 'pass', skipped: 'info' };
         for (const sf of server.findings) {
@@ -967,14 +1039,6 @@ class HAConfigAuditor extends HTMLElement {
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      // NEW CHECK: Long-lived access tokens
-      try {
-        const tokenCount = users.filter(u => u.refresh_tokens && u.refresh_tokens.length > 0).length;
-        if (tokenCount > 0) {
-          findings.info.push({ id: 'access_tokens', title: `${tokenCount} user(s) with long-lived access token(s)`, desc: 'Access tokens should be rotated regularly and kept secure', fix: 'Rotate tokens periodically. Remove unused tokens from Settings \u2192 Users' });
-        }
-      } catch(e) { console.debug('[config-auditor]', e.message); }
-
       // NEW CHECK: Camera entities
       try {
         const cameraEntities = allEntities.filter(e => e.startsWith('camera.'));
@@ -996,7 +1060,7 @@ class HAConfigAuditor extends HTMLElement {
         const recorderEntities = allEntities.filter(e => e.startsWith('recorder.'));
         if (recorderEntities.length > 0) {
           const recorderState = states['automation.'] || states['script.'];
-          const purgeKeepDays = this._hass.config?.components?.recorder?.purge_keep_days;
+          const purgeKeepDays = auditHass.config?.components?.recorder?.purge_keep_days;
           if (purgeKeepDays && purgeKeepDays > 30) {
             findings.info.push({ id: 'recorder_retention', title: `Recorder keeping data for ${purgeKeepDays} days`, desc: 'Long retention can be a privacy concern if you have guests or visitors', fix: 'Consider reducing purge_keep_days in configuration.yaml if privacy is a concern' });
           }
@@ -1039,13 +1103,13 @@ class HAConfigAuditor extends HTMLElement {
       // NEW CHECK: Firewall / Network isolation
       try {
         if (hostInfo?.chassis && hostInfo.chassis !== 'embedded') {
-          findings.warning.push({ id: 'non_haos', title: 'Running on non-HAOS system', desc: `Detected chassis: ${hostInfo.chassis}. Missing Supervisor network isolation.`, fix: 'Use Home Assistant OS for built-in network isolation features. Manual firewall configuration is required on generic Linux.' });
+          findings.info.push({ id: 'host_chassis', title: 'Host hardware type', desc: `Supervisor reports chassis: ${hostInfo.chassis}. This does not establish installation type or network isolation.` });
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
       // NEW CHECK: Backup encryption
       try {
-        const backups = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/backups', method: 'get' });
+        const backups = await callWS({ type: 'supervisor/api', endpoint: '/backups', method: 'get' });
         const backupList = backups?.backups || backups?.data?.backups || [];
         if (backupList.length > 0) {
           const unencryptedBackups = backupList.filter(b => b.protected === false);
@@ -1060,12 +1124,14 @@ class HAConfigAuditor extends HTMLElement {
         const mqttAddonRunning = installedAddons.find(a => (a.slug || '').includes('mosquitto') && a.state === 'started');
         if (mqttAddonRunning) {
           try {
-            const mqttConfig = await this._hass.callWS({ type: 'supervisor/api', endpoint: `/addons/${mqttAddonRunning.slug}/options`, method: 'get' });
+            const mqttConfig = await callWS({ type: 'supervisor/api', endpoint: `/addons/${mqttAddonRunning.slug}/options`, method: 'get' });
             const opts = mqttConfig?.options || mqttConfig?.data?.options || {};
             if (opts.anonymous === true) {
               findings.critical.push({ id: 'mqtt_anonymous', title: 'MQTT allows anonymous connections', desc: 'Anyone on the network can connect to your MQTT broker without authentication', fix: 'Disable anonymous access in Mosquitto addon configuration and set up proper user credentials' });
-            } else {
+            } else if (opts.anonymous === false) {
               findings.pass.push({ id: 'mqtt_anonymous', title: 'MQTT requires authentication', desc: 'Anonymous connections are disabled' });
+            } else {
+              findings.info.push({ id: 'mqtt_anonymous', title: 'MQTT anonymous access not checked', desc: 'The add-on response did not include an explicit anonymous setting.' });
             }
           } catch(e2) {
             findings.info.push({ id: 'mqtt_config', title: 'Could not verify MQTT configuration', desc: 'Unable to read Mosquitto addon settings', fix: 'Manually verify MQTT authentication settings' });
@@ -1083,7 +1149,7 @@ class HAConfigAuditor extends HTMLElement {
 
       // NEW CHECK: HTTP configuration (CORS)
       try {
-        const httpConfig = this._hass.config;
+        const httpConfig = auditHass.config;
         if (httpConfig?.components?.includes('cors') || httpConfig?.allowlist_external_urls?.length > 0) {
           findings.info.push({ id: 'cors_config', title: 'CORS or external URL allowlist configured', desc: 'Cross-origin requests or external URLs are permitted', fix: 'Review allowed origins and URLs to ensure they are trusted' });
         }
@@ -1091,9 +1157,9 @@ class HAConfigAuditor extends HTMLElement {
 
       // NEW CHECK: Port 8123 direct exposure
       try {
-        const externalUrl = this._hass.config?.external_url || '';
+        const externalUrl = auditHass.config?.external_url || '';
         if (externalUrl && externalUrl.includes(':8123')) {
-          findings.warning.push({ id: 'port_exposure', title: 'Default port 8123 exposed externally', desc: `External URL uses default HA port: ${externalUrl}`, fix: 'Use a reverse proxy (NGINX, Caddy) or Nabu Casa instead of direct port forwarding. Change default port if exposing directly.' });
+          findings.info.push({ id: 'port_exposure', title: 'External URL includes port 8123', desc: `Configured external URL: ${externalUrl}. Internet reachability was not tested.`, fix: 'Review firewall and reverse proxy configuration if remote access is intended.' });
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
@@ -1114,50 +1180,57 @@ class HAConfigAuditor extends HTMLElement {
       // Fetch network interfaces from Supervisor API
       let networkInfo = [];
       try {
-        const netResp = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/network/info', method: 'get' });
+        const netResp = await callWS({ type: 'supervisor/api', endpoint: '/network/info', method: 'get' });
         networkInfo = netResp?.interfaces || netResp?.data?.interfaces || [];
       } catch(ne) { console.debug('[ha-config-auditor] caught:', ne); }
       if (networkInfo.length === 0) {
         try {
-          const netWS = await this._hass.callWS({ type: 'network' });
+          const netWS = await callWS({ type: 'network' });
           if (netWS?.adapters) {
-            networkInfo = netWS.adapters.filter(a => a.enabled).map(a => ({
-              interface: a.name, type: a.name.startsWith('wlan') ? 'wireless' : 'ethernet',
-              enabled: a.enabled, connected: a.enabled, mac: '',
-              ipv4: { address: a.ipv4 ? a.ipv4.map(ip => ip.address + '/' + ip.network_prefix) : [], method: a.auto ? 'auto' : 'manual', gateway: null, nameservers: [] }
+            networkInfo = netWS.adapters.filter(a => a && typeof a.name === 'string').map(a => ({
+              interface: a.name, type: 'unknown',
+              enabled: a.enabled, mac: '',
+              ipv4: { address: a.ipv4 ? a.ipv4.map(ip => ip.address + '/' + ip.network_prefix) : [], method: 'N/A', gateway: null, nameservers: [] }
             }));
           }
         } catch(ne2) { console.debug('[ha-config-auditor] caught:', ne2); }
       }
       try {
-        const infoResp = await this._hass.callWS({ type: 'supervisor/api', endpoint: '/info', method: 'get' });
+        const infoResp = await callWS({ type: 'supervisor/api', endpoint: '/info', method: 'get' });
         hostInfo = infoResp || null;
       } catch(ne3) { console.debug('[ha-config-auditor] caught:', ne3); }
 
       // Fetch config entries (integrations)
       let cfgEntries = [];
+      let integrationsAvailable = false;
       try {
-        const entries = await this._hass.callWS({type: 'config_entries/get'});
-        cfgEntries = entries || [];
+        const entries = await callWS({type: 'config_entries/get'});
+        if (Array.isArray(entries) && entries.every(e => e && typeof e.domain === 'string')) {
+          cfgEntries = entries;
+          integrationsAvailable = true;
+        }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, addons: installedAddons, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
+      if (!isCurrent()) return;
+      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, integrationsAvailable, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
     this._saveScanData();
 
     } catch(e) {
+      if (!isCurrent()) return;
       console.error('[Config Auditor] Error:', e);
       this._auditData = { error: e.message };
     }
 
+    if (!isCurrent()) return;
     this._loading = false;
     this._updateContent();
   }
 
-  async _serverAudit() {
+  async _serverAudit(callWS) {
     // Provided by the Config Auditor integration (admin-only WebSocket command).
     try {
-      return await this._hass.callWS({ type: 'ha_config_auditor/audit' });
+      return await callWS({ type: 'ha_config_auditor/audit' });
     } catch (e) {
       console.debug('[config-auditor] server checks unavailable:', e && (e.code || e.message));
       return null;
@@ -1165,14 +1238,19 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   _render() {
-    if (!this._hass) return;
+    if (this._hass?.user?.is_admin !== true) {
+      const html = `<style>${HA_CONFIG_AUDITOR_BENTO_CSS}</style><div class="card" role="status">${_esc(this._t.adminRequired)}</div>`;
+      this._lastHtml = html;
+      this.shadowRoot.innerHTML = html;
+      return;
+    }
     const html = `
       <style>${HA_CONFIG_AUDITOR_BENTO_CSS}
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
 
 /* Donation footer — diamond top */
 .donate-section {  margin: 24px 0 4px; padding: 20px 24px; position: relative; overflow: hidden;  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(236,72,153,0.06));  border: 1px solid rgba(99,102,241,0.18); border-radius: var(--bento-radius-md, 18px);  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px;  font-family: 'Inter', -apple-system, sans-serif;}
-.donate-section::before {  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);}
+.donate-section:not([data-source="own-card"])::before {  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);}
 .donate-section .donate-text { flex: 1; min-width: 240px; }
 .donate-section h3 {  margin: 0 0 6px; font-size: 16px; font-weight: 700; letter-spacing: -0.02em;  background: linear-gradient(135deg, #6366f1, #ec4899);  -webkit-background-clip: text; background-clip: text; color: transparent;}
 .donate-section p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--bento-text-secondary, #57534e); letter-spacing: -0.005em; }
@@ -1524,6 +1602,7 @@ textarea { min-height: 80px; resize: vertical; }
 .stat-trend.positive, .trend-up { color: var(--bento-success); }
 .stat-trend.negative, .trend-down { color: var(--bento-error); }
 
+.table-container { width: 100%; max-width: 100%; overflow-x: auto; }
 .device-table, .entity-table, .table, .alert-table, .data-table, .backup-table, .history-table, .log-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 16px; }
 .device-table th, .entity-table th, .table th, .alert-table th, .data-table th, .backup-table th, table th { text-align: left; padding: 12px 16px; border-bottom: 2px solid var(--bento-border); font-weight: 600; color: var(--bento-text-secondary); background: var(--bento-bg); cursor: pointer; user-select: none; white-space: nowrap; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; transition: var(--bento-transition); font-family: 'Inter', sans-serif; }
 .device-table th:first-child, .entity-table th:first-child, .table th:first-child, table th:first-child { border-radius: var(--bento-radius-xs) 0 0 0; }
@@ -1803,11 +1882,11 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       
 
 </style>
-        ${_renderLocalIntro()}
+        ${_renderLocalIntro(this._lang)}
         <div class="card">
           <div class="card-header">
             <h2>${_esc(this._config.title || '')}</h2>
-            <!-- Refresh handled by panel toolbar -->
+            <button type="button" class="audit-refresh">${_esc(this._t.refresh)}</button>
           </div>
           <div class="tabs" role="tablist">
             <button class="tab-button ${this._activeTab === 'overview' ? 'active' : ''}" data-tab="overview" role="tab" aria-selected="${this._activeTab === 'overview'}">Overview</button>
@@ -1820,30 +1899,43 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
           <div id="content"></div>
         
         </div>
-        ${_LOCAL_DONATE_HTML}
+        ${this._hass?.user?.is_admin && this._config?.show_support !== false && !_localSupportDismissed() ? _renderLocalSupport(this._lang) : ''}
     `;
     if (this._lastHtml === html) return;
     this._lastHtml = html;
     this.shadowRoot.innerHTML = html;
     _bindLocalIntroDismiss(this.shadowRoot);
+    _bindLocalSupportDismiss(this.shadowRoot);
 
     this.shadowRoot.querySelectorAll('.tab-button').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.shadowRoot.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        this.shadowRoot.querySelectorAll('.tab-button').forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-selected', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
         this._activeTab = btn.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this._activeTab);
         this._updateContent();
       });
     });
 
-    // Refresh now handled by panel toolbar (removed internal Re-scan button)
+    this.shadowRoot.querySelector('.audit-refresh').addEventListener('click', () => {
+      if (this._loading) return;
+      this._lastAuditTime = Date.now();
+      this._runAudit();
+    });
+    this._updateContent();
   }
 
   _updateContent() {
+    if (this._hass?.user?.is_admin !== true) { this._render(); return; }
     const content = this.shadowRoot.getElementById('content');
     if (!content) return;
+    const refresh = this.shadowRoot.querySelector('.audit-refresh');
+    if (refresh) { refresh.disabled = this._loading; refresh.textContent = this._t.refresh; }
     if (this._loading) { content.innerHTML = '<div class="loading"><div class="spinner"></div>Running configuration best-practices audit...</div>'; return; }
     if (!this._auditData || this._auditData.error) { content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._auditData?.error || 'Audit failed')}</div>`; return; }
     const d = this._auditData;
@@ -1869,9 +1961,10 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       </div>
     </div>`;
     const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
-    const addonsDisplay = noSupervisor && d.addons.length === 0 ? 'N/A' : String(d.addons.length);
-    const integrationsDisplay = d.integrations?.length || 0;
-    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${noSupervisor && d.addons.length === 0 ? 'Addons (HA OS only)' : 'Addons installed'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Integrations</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.users.length}</div><div style="font-size:11px;color:var(--bento-text-secondary)">User accounts</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
+    const addonsDisplay = d.addonsAvailable === true ? String(d.addons.length) : 'N/A';
+    const integrationsDisplay = d.integrationsAvailable === true ? String(d.integrations.length) : 'N/A';
+    const usersDisplay = d.usersAvailable === true ? String(d.users.length) : 'N/A';
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.integrationsAvailable === true ? 'Integrations' : 'Integrations unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
     if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
     if (d.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
     if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString()}</div>`; }
@@ -1904,16 +1997,16 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   _renderAddonsSection(d) {
+    if (d.addonsAvailable !== true) return '<div class="empty-msg">Add-on inventory is unavailable; installed count was not measured.</div>';
     if (!d.addons.length) {
-      const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
-      if (noSupervisor) return `<div class="empty-msg">\u2139\uFE0F ${this._lang === 'pl' ? 'Addony wymagaj\u0105 HA OS lub Supervised. Brak Supervisor API na tej instalacji.' : 'Addons require HA OS or Supervised. No Supervisor API detected on this installation.'}</div>`;
       return '<div class="empty-msg">No addons installed</div>';
     }
-    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = a.protected !== false; const autoUp = a.auto_update !== false; const hostNet = a.host_network === true; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(a.state || 'stopped')}</td><td style="color:${prot ? '#4caf50' : '#f44336'}">${prot ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${autoUp ? '#4caf50' : '#ff9800'}">${autoUp ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet ? '\u26A0 Yes' : 'No'}</td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(a.state || 'stopped')}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? 'N/A' : prot ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? 'N/A' : autoUp ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? 'N/A' : hostNet ? '\u26A0 Yes' : 'No'}</td></tr>`; }).join('')}</tbody></table></div>`;
   }
 
   _renderUsers(d) {
-    if (!d.users.length) return '<div class="empty-msg">Could not retrieve user list</div>';
+    if (d.usersAvailable !== true) return '<div class="empty-msg">User accounts are unavailable; check account permissions or retry as an administrator.</div>';
+    if (!d.users.length) return '<div class="empty-msg">No user accounts found</div>';
     return `<div class="table-container"><table class="entity-table"><thead><tr><th>User</th><th>Role</th><th>Active</th><th>Local Only</th><th>System</th></tr></thead><tbody>${d.users.map(u => `<tr><td>${this._sanitize(u.name || 'Unnamed')}</td><td>${u.is_owner ? '\u{1F451} Owner' : u.group_ids?.includes('system-admin') ? 'Admin' : 'User'}</td><td style="color:${u.is_active !== false ? '#4caf50' : '#9e9e9e'}">${u.is_active !== false ? '\u2713 Active' : 'Inactive'}</td><td>${u.local_only ? '\u2713 Yes' : 'No'}</td><td>${u.system_generated ? '\u{1F916} Yes' : 'No'}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
@@ -1924,9 +2017,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     const hasCloud = (this._hass.config?.components || []).includes('cloud');
     html += '<div class="section-title">\u{1F310} Remote Access</div>';
     if (hasCloud) {
-      html += `<div class="finding pass"><div class="finding-header"><span class="finding-icon">\u2705</span><span class="finding-title">Nabu Casa Cloud</span><span class="finding-badge badge-pass">ACTIVE</span></div><div class="finding-desc">Secure remote access via Home Assistant Cloud (Nabu Casa). Encrypted tunnel, no port forwarding needed.</div></div>`;
+      html += `<div class="finding info"><div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Nabu Casa Cloud component loaded</span><span class="finding-badge badge-info">Not checked</span></div><div class="finding-desc">The cloud component is loaded. Subscription, active remote tunnel, reachability and TLS were not checked.</div></div>`;
     } else {
-      html += `<div class="finding info"><div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">No Cloud Service</span></div><div class="finding-desc">Home Assistant Cloud (Nabu Casa) is not configured. If you need remote access, it's the safest option.</div></div>`;
+      html += `<div class="finding info"><div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Cloud component not loaded</span></div><div class="finding-desc">The cloud component is not loaded. Configuration and remote access status were not checked.</div></div>`;
     }
 
     // URLs
@@ -1934,19 +2027,19 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     const externalUrl = this._hass.config?.external_url || '';
     const internalUrl = this._hass.config?.internal_url || '';
 
-    html += `<div class="finding ${externalUrl.startsWith('https://') ? 'pass' : externalUrl.startsWith('http://') ? 'critical' : 'info'}">`;
+    html += `<div class="finding ${externalUrl.startsWith('http://') ? 'warning' : 'info'}">`;
     if (externalUrl.startsWith('https://')) {
-      html += `<div class="finding-header"><span class="finding-icon">\u2705</span><span class="finding-title">External URL (HTTPS)</span><span class="finding-badge badge-pass">Secure</span></div>`;
+      html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">External URL configured for HTTPS</span><span class="finding-badge badge-info">Not tested</span></div>`;
     } else if (externalUrl.startsWith('http://')) {
-      html += `<div class="finding-header"><span class="finding-icon">\u{1F6A8}</span><span class="finding-title">External URL (HTTP)</span><span class="finding-badge badge-critical">INSECURE</span></div>`;
+      html += `<div class="finding-header"><span class="finding-icon">\u26A0</span><span class="finding-title">External URL configured for HTTP</span><span class="finding-badge badge-warning">Review configuration</span></div>`;
     } else {
       html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">No External URL</span></div>`;
     }
-    html += `<div class="finding-desc">${_esc(externalUrl || 'Not configured')}</div></div>`;
+    html += `<div class="finding-desc">${_esc(externalUrl || 'Not configured')}. Remote endpoint, reachability and certificate were not tested.</div></div>`;
 
-    html += `<div class="finding ${internalUrl.startsWith('https://') ? 'pass' : 'info'}">`;
+    html += '<div class="finding info">';
     html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Internal URL</span></div>`;
-    html += `<div class="finding-desc">${_esc(internalUrl || 'http://homeassistant.local:8123 (default)')}</div></div>`;
+    html += `<div class="finding-desc">${_esc(internalUrl || 'N/A — no internal URL configured')}. Endpoint and certificate were not tested.</div></div>`;
 
     // Network info from hass.config
     const haConfig = this._hass.config || {};
@@ -1960,9 +2053,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span>${_esc(hi.operating_system)}</span>`;
     if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span>${_esc(hi.supervisor)}</span>`;
     html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span>${_esc(haConfig.time_zone || 'N/A')}</span>`;
-    const integrationCount = d.integrations?.length || (haConfig.components || []).length;
-    const componentCount = (haConfig.components || []).length;
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount > 0 ? integrationCount + ' entries' : componentCount > 0 ? componentCount + ' components' : 'N/A'}</span>`;
+    const integrationCount = d.integrationsAvailable === true ? d.integrations.length + ' entries' : 'N/A';
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount}</span>`;
     html += '</div></div></div>';
 
     // Network Interfaces from Supervisor
@@ -1972,11 +2064,11 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       ifaces.forEach(iface => {
         const name = iface.interface || iface.name || 'unknown';
         const type = iface.type || 'unknown';
-        const enabled = iface.enabled !== false;
+        const enabled = iface.enabled === true ? 'Enabled' : iface.enabled === false ? 'Disabled' : 'N/A';
         const ipv4 = iface.ipv4 || {};
         const addresses = ipv4.address || [];
         const gateway = ipv4.gateway || 'N/A';
-        const method = ipv4.method || 'auto';
+        const method = ipv4.method || 'N/A';
         const dns = (iface.ipv4?.nameservers || []).join(', ') || 'N/A';
         const mac = iface.mac || 'N/A';
         const wifi = iface.wifi || null;
@@ -1985,17 +2077,18 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         html += '<div class="finding-header">';
         html += '<span class="finding-icon">' + (type === 'wireless' ? '\u{1F4F6}' : '\u{1F50C}') + '</span>';
         html += '<span class="finding-title">' + _esc(name) + ' (' + _esc(type) + ')</span>';
-        html += '<span class="finding-badge ' + (enabled ? 'badge-pass' : 'badge-info') + '">' + (enabled ? 'UP' : 'DOWN') + '</span>';
+        html += '<span class="finding-badge badge-info">' + enabled + '</span>';
         html += '</div>';
         html += '<div class="finding-desc"><div style="display:grid;grid-template-columns:100px 1fr;gap:4px 12px;font-size:12px;">';
         if (addresses.length > 0) html += '<span style="font-weight:600">IP</span><span>' + _esc(addresses.join(', ')) + '</span>';
+        html += '<span style="font-weight:600">Link status</span><span>' + (iface.connected === true ? 'Connected' : iface.connected === false ? 'Disconnected' : 'N/A') + '</span>';
         html += '<span style="font-weight:600">Gateway</span><span>' + _esc(gateway) + '</span>';
         html += '<span style="font-weight:600">DNS</span><span>' + _esc(dns) + '</span>';
         html += '<span style="font-weight:600">MAC</span><span><code style="font-size:11px">' + _esc(mac) + '</code></span>';
         html += '<span style="font-weight:600">Method</span><span>' + _esc(method) + '</span>';
         if (wifi) {
           html += '<span style="font-weight:600">SSID</span><span>' + _esc(wifi.ssid || 'N/A') + '</span>';
-          html += '<span style="font-weight:600">Signal</span><span>' + _esc(wifi.signal ? wifi.signal + '%' : 'N/A') + '</span>';
+          html += '<span style="font-weight:600">Signal</span><span>' + _esc(typeof wifi.signal === 'number' && Number.isFinite(wifi.signal) ? wifi.signal + '%' : 'N/A') + '</span>';
         }
         html += '</div></div></div>';
       });
@@ -2004,7 +2097,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += '<div class="section-title">\u{1F5A5}\uFE0F Exposed Addon Ports</div>';
     const exposedAddons = d.addons.filter(a => (a.ports && Object.keys(a.ports).length > 0) || (a.network && Object.keys(a.network).length > 0));
     if (exposedAddons.length === 0) {
-      html += '<div class="empty-msg">No addons exposing ports</div>';
+      const portsKnown = d.addonsAvailable === true && d.addons.every(a => Object.hasOwn(a, 'ports') || Object.hasOwn(a, 'network'));
+      html += portsKnown ? '<div class="empty-msg">No addons exposing ports</div>' : '<div class="empty-msg">Add-on port inventory is unavailable; exposure was not measured.</div>';
     } else {
       html += '<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Ingress</th><th>Ports</th><th>State</th></tr></thead><tbody>';
       exposedAddons.forEach(a => {
@@ -2041,22 +2135,22 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   _renderIntegrations(d) { return this._renderIntegrationsSection(d); }
 
   _renderIntegrationsSection(d) {
-    if (!d.integrations || !d.integrations.length) return '<div class="empty-msg">No integrations configured</div>';
-    const hacsInts = d.integrations.filter(e => e.source === 'hacs' || e.source === 'custom');
-    const coreInts = d.integrations.filter(e => e.source !== 'hacs' && e.source !== 'custom');
+    if (d.integrationsAvailable !== true) return '<div class="empty-msg">Integration inventory is unavailable; configured count was not measured. Check permissions or use Refresh to retry.</div>';
+    if (!d.integrations.length) return '<div class="empty-msg">No integrations configured</div>';
+    const knownSource = d.integrations.filter(e => typeof e.source === 'string' && e.source.length > 0).length;
     const errorInts = d.integrations.filter(e => e.state === 'setup_error');
     let html = `<div style="margin-top:20px"><h3 style="margin:0 0 12px;font-size:15px;color:var(--bento-text);">\u{1F50C} Integrations (${d.integrations.length})</h3>`;
     html += `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">`;
-    html += `<div style="padding:4px 10px;background:rgba(33,150,243,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">\u{1F4E6} Core: ${coreInts.length}</div>`;
-    html += `<div style="padding:4px 10px;background:rgba(255,152,0,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">\u{1F3EA} HACS: ${hacsInts.length}</div>`;
+    html += `<div style="padding:4px 10px;background:rgba(33,150,243,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">Reported flow source: ${knownSource}</div>`;
+    html += `<div style="padding:4px 10px;background:rgba(255,152,0,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">Flow source unavailable: ${d.integrations.length - knownSource}</div>`;
     if (errorInts.length > 0) html += `<div style="padding:4px 10px;background:rgba(244,67,54,0.08);border-radius:6px;font-size:11px;color:#f44336;">\u26A0 Errors: ${errorInts.length}</div>`;
     html += `</div>`;
-    html += `<div class="table-container"><table class="entity-table"><thead><tr><th>Integration</th><th>Domain</th><th>Source</th><th>Status</th></tr></thead><tbody>`;
+    html += `<div class="table-container"><table class="entity-table"><thead><tr><th>Integration</th><th>Domain</th><th>Config-flow source</th><th>Status</th></tr></thead><tbody>`;
     d.integrations.forEach(e => {
       const statusColor = e.state === 'loaded' ? '#4caf50' : e.state === 'setup_error' ? '#f44336' : e.state === 'not_loaded' ? '#ff9800' : '#9e9e9e';
-      const isHacs = e.source === 'hacs' || e.source === 'custom';
+      const source = typeof e.source === 'string' && e.source.length > 0 ? e.source : 'N/A';
       html += `<tr><td>${_esc(e.title || e.domain)}</td><td style="font-family:monospace;font-size:12px">${_esc(e.domain)}</td>`;
-      html += `<td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;background:${isHacs ? 'rgba(255,152,0,0.1);color:#f57c00' : 'rgba(33,150,243,0.1);color:#1976d2'}">${isHacs ? '\u{1F3EA} HACS' : '\u{1F4E6} Core'}</span></td>`;
+      html += `<td><span class="finding-badge badge-info">${_esc(source)}</span></td>`;
       html += `<td style="color:${statusColor};font-weight:600">\u25CF ${_esc(e.state || 'unknown')}</td></tr>`;
     });
     html += '</tbody></table></div></div>';
@@ -2122,7 +2216,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   disconnectedCallback() {
-    // Cleanup any active event listeners or timers
+    this._auditEpoch++;
+    this._loading = false;
+    this._firstHassRender = false;
   }
 
   setActiveTab(tabId) {
@@ -2136,7 +2232,7 @@ if (!customElements.get('ha-config-auditor')) {
 }
 
 console.info(
-  '%c  HA-CONFIG-AUDITOR  %c v6.0.0 ',
+  '%c  HA-CONFIG-AUDITOR  %c v6.0.1 ',
   'background: #f44336; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #ffebee; color: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );

@@ -21,10 +21,10 @@ them through an admin-only WebSocket command (`ha_config_auditor/audit`):
 |---|---|
 | Login providers | Enabled auth providers; `legacy_api_password` fails, `trusted_networks` warns (fails with `allow_bypass_login`) |
 | Administrator MFA | Active administrators who can log in remotely and have no MFA module enabled |
-| HTTPS | Whether HA serves TLS itself or the external URL uses HTTPS |
+| HTTPS | Whether HA serves TLS itself; an HTTPS external URL is reported as configured, without claiming the remote endpoint was probed |
 | Trusted proxies | `trusted_proxies` of the running HTTP server; `0.0.0.0/0` fails, large public ranges warn |
 | IP ban | Whether failed logins lead to an IP ban (`ip_ban_enabled` + `login_attempts_threshold`) |
-| Plain-text secrets | YAML files in the config folder with `password`/`token`/`api_key`/`secret` values not using `!secret` — reported as file, line and key; **values are never read into the result** |
+| Plain-text secrets | A bounded heuristic scan of configuration YAML for `password`/`token`/`api_key`/`secret` literals. Findings show file, line and key, never values; an incomplete scan is not a pass. No match is informational, not proof that every secret is protected. |
 
 A check that cannot run is shown as *not checked* with the reason — never as
 passed. Without the integration the card says these checks are unavailable
@@ -41,23 +41,26 @@ instead of guessing.
    for disabled protection mode, missing auto-update, host networking,
    privileged access, exposed ports without Ingress, and known "risky"
    services (SSH, Samba, FTP, Telnet).
-3. **Network & exposure.** External/internal URL scheme (HTTPS vs. plain
-   HTTP), certificate management (DuckDNS/Nabu Casa auto-renewed vs. manual),
-   CORS, Nabu Casa Cloud status, and Supervisor network interfaces
-   (`/network/info`) are all reviewed for exposure risks.
+3. **Network & exposure.** Configured URL schemes and loaded Cloud component
+   are reported as configuration evidence. Remote reachability, certificate
+   validity/renewal, subscription and active tunnel status are not tested.
+   Supervisor interface metadata preserves explicit enabled/connected states;
+   unavailable values are N/A, and enabled configuration does not prove an UP link.
 4. **Users & auth.** Registered users (`config/auth/list`) are checked for
-   multiple owner accounts, local-only restriction, and long-lived access
-   tokens (`auth/long_lived_access_token/list`); deprecated
-   `legacy_api_password` and `trusted_networks` auth providers are flagged if
-   present.
+   multiple owner accounts and local-only restriction. `auth/refresh_tokens`
+   provides metadata for the **current account only**: only entries explicitly
+   typed `long_lived_access_token` count as long-lived tokens; ordinary sessions
+   are excluded. No token values or metadata are stored. Denied, unsupported or
+   malformed metadata is explicitly **not checked**; other users' tokens are not
+   measured. The integration separately checks configured auth providers.
 5. **Integrations, entities & backups.** Integrations (`config_entries/get`)
-   are listed by source and status; entity IDs are scanned for cameras,
+   are listed by config-flow source and setup status, which do not prove Core/HACS origin. A measured empty inventory differs from an unavailable inventory; entity IDs are scanned for cameras,
    person trackers, shell commands and webhook triggers; backups
    (`/backups`) are checked for missing encryption; a running Mosquitto
    add-on has its anonymous-access setting verified.
 6. **Findings, not fixes.** Every check produces a Pass, Warning, Failed or
    Info finding with a description and, where relevant, a one-line
-   suggested fix. The audit re-runs automatically every 5 minutes while the
+   suggested fix. The audit re-runs on Home Assistant updates after five minutes while the
    card is visible — nothing is changed in your configuration automatically.
 
 ### What is automatic vs. manual
@@ -76,9 +79,9 @@ instead of guessing.
 |---|---|
 | ![Overview tab, light theme](docs/screenshots/card-overview-light.png) | ![Overview tab, dark theme](docs/screenshots/card-overview-dark.png) |
 
-*Overview tab: check summary (Failed / Warnings / Passed / Info), key counts
-and the Failed/Warning findings. Dark mode follows your Home Assistant theme
-automatically.*
+*Overview tab with synthetic checks: Failed, Warnings, Passed and Info counts,
+plus example findings. No household configuration appears in the image. Dark
+mode follows your Home Assistant theme.*
 
 ## Installation
 
@@ -105,6 +108,13 @@ type: custom:ha-config-auditor
 The integration registers the card for dashboards itself. If the card is
 already loaded from a HACS Dashboard install, it does not add a second copy.
 
+Keep your working Dashboard plugin, its resources, and existing card configuration
+while trying the integration. In storage mode the integration reuses the existing
+card resource. Check that your dashboards still work and the integration is loaded
+before retiring the plugin. The public plugin remains available until the
+integration release and migration have been verified. A category change alone
+is not a verified migration.
+
 **Options** (Settings → Devices & services → Config Auditor → Configure):
 show or hide the sidebar panel, and report failed/warning checks in
 Settings → Repairs.
@@ -120,7 +130,7 @@ checks are then reported as unavailable.
   tabs.
 - Pass / Warning / Failed / Info findings with actionable fix suggestions.
 - Supervisor/OS/Core update checks, add-on hygiene, SSL/exposure checks,
-  user and token review, backup-encryption and MQTT-auth checks.
+  user review and current-account token counts, backup-encryption and MQTT-auth checks.
 - Bundled Bento Design System (light + dark mode, follows your HA theme,
   mobile-friendly).
 - Self-contained — no shared HA Tools dependency.
@@ -163,6 +173,18 @@ development:
 - [Buy Me a Coffee](https://buymeacoffee.com/macsiem)
 - [PayPal](https://www.paypal.com/donate/?hosted_button_id=Y967H4PLRBN8W)
 
+The optional in-card support link is shown only to administrators. Dismiss it in the card or set `show_support: false` in the card configuration.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Privacy and data
+
+The integration reads security settings and allowed configuration files on your Home Assistant server. Audit results can reveal security weaknesses. Treat findings and YAML as private, and share only a minimal redacted reproduction. The audit itself does not modify the configuration.
+
+See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
+
+First-run guidance, Refresh and optional support labels follow the Home Assistant language (Polish or English, including Polish regional locales). Switching language preserves visible findings, keyboard focus, the selected tab, authored title and dismissal choices, and does not trigger another audit. The Findings and Tips names in the guidance match the current tab labels. Use Refresh in the card or sidebar panel to retry unavailable checks without navigating away. The main findings and tab labels remain in English.
+
+Unloading the integration disables its server audit command and removes its own YAML fallback module. Pending replies are discarded if the integration is unloaded or administrator permissions are lost. Foreign dashboard resources and modules are preserved.
