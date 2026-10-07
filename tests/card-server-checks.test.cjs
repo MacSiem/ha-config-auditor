@@ -26,6 +26,11 @@ function hass(server, config = {}, responses = {}) {
     states: {}, language: 'en', themes: { darkMode: false },
     user: { is_admin: true }, config: { components: [], external_url: null, version: '2026.9.3', ...config },
     callWS: async (msg) => {
+      if (msg.type === 'auth/long_lived_access_token/list') throw new Error('unsupported obsolete token API');
+      if (['auth/refresh_tokens', 'network'].includes(msg.type) && Object.hasOwn(responses, msg.type)) {
+        if (responses[msg.type] instanceof Error) throw responses[msg.type];
+        return responses[msg.type];
+      }
       if (msg.type === 'supervisor/api' && Object.hasOwn(responses, msg.endpoint)) return responses[msg.endpoint];
       if (msg.type === 'ha_config_auditor/audit') {
         if (server) return server;
@@ -180,7 +185,7 @@ test('a measured empty or populated user inventory retains its actual count', as
 
 
 test('denied or malformed integration inventory is unavailable in all visible summaries', async () => {
-  for (const response of [new Error('unauthorized'), null, { error: 'unavailable' }]) {
+  for (const response of [new Error('unauthorized'), null, { error: 'unavailable' }, [null]]) {
     const { html, integrationsHtml, networkHtml } = await audit(null, { components: ['frontend', 'http'] }, { 'config_entries/get': response });
     const dom = new JSDOM(html);
     try {
@@ -221,4 +226,83 @@ test('Network HTTPS details describe configuration without claiming tested secur
       assert.match(finding.textContent, /not tested|not checked/i);
     }
   } finally { dom.window.close(); }
+});
+
+
+test('loaded cloud component is information, not proof of an active remote tunnel', async () => {
+  const { networkHtml } = await audit(null, { components: ['cloud'] });
+  const dom = new JSDOM(networkHtml);
+  try {
+    const cloud = [...dom.window.document.querySelectorAll('.finding')].find(el => el.textContent.includes('Nabu Casa'));
+    assert.ok(cloud);
+    assert.ok(!cloud.classList.contains('pass'));
+    assert.doesNotMatch(cloud.textContent, /ACTIVE|Secure remote access/);
+    assert.match(cloud.textContent, /loaded|component/i);
+    assert.match(cloud.textContent, /not checked|not tested/i);
+    assert.doesNotMatch(networkHtml, /homeassistant.local:8123/);
+  } finally { dom.window.close(); }
+});
+
+test('adapter configuration does not imply link state and zero signal stays measured', async () => {
+  const interfaces = [{ interface: 'configured', enabled: true, wifi: { signal: 0 } }, { interface: 'unknown' }, { interface: 'disabled', enabled: false }];
+  const { networkHtml } = await audit(null, {}, { '/network/info': { interfaces } });
+  const dom = new JSDOM(networkHtml);
+  try {
+    const rows = [...dom.window.document.querySelectorAll('.finding')].filter(el => el.querySelector('.finding-title')?.textContent.includes('(unknown)'));
+    assert.equal(rows.length, 3);
+    assert.match(rows[0].textContent, /Enabled/);
+    assert.match(rows[0].textContent, /0%/);
+    assert.match(rows[1].textContent, /N\/A/);
+    assert.match(rows[2].textContent, /Disabled/);
+    for (const row of rows) assert.doesNotMatch(row.querySelector('.finding-badge').textContent, /UP|DOWN/);
+  } finally { dom.window.close(); }
+});
+
+test('Core network adapter fallback preserves unknown and disabled states without claiming connectivity', async () => {
+  const { networkHtml } = await audit(null, {}, { network: { adapters: [{ name: 'qa', enabled: true, ipv4: [] }, { name: 'disabled', enabled: false, ipv4: [] }, { name: 'unknown', ipv4: [] }] } });
+  assert.match(networkHtml, /disabled/);
+  assert.match(networkHtml, /unknown/);
+  const dom = new JSDOM(networkHtml);
+  try { for (const badge of dom.window.document.querySelectorAll('.finding-badge')) assert.doesNotMatch(badge.textContent, /UP|DOWN/); }
+  finally { dom.window.close(); }
+});
+
+test('config-flow source stays visible without inventing Core or HACS origin', async () => {
+  const entries = ['user', 'custom', 'hacs', undefined].map((source, i) => ({ domain: 'qa' + i, title: 'QA' + i, source, state: 'loaded' }));
+  const { integrationsHtml } = await audit(null, {}, { 'config_entries/get': entries });
+  const dom = new JSDOM(integrationsHtml);
+  try {
+    const rows = [...dom.window.document.querySelectorAll('tbody tr')];
+    assert.equal(rows.length, 4);
+    assert.deepEqual(rows.map(row => row.children[2].textContent.trim()), ['user', 'custom', 'hacs', 'N/A']);
+    assert.doesNotMatch(integrationsHtml, /Core:|HACS:|📦 Core|🏪 HACS/);
+    assert.ok(rows.every(row => row.children[3].textContent.includes('loaded')));
+  } finally { dom.window.close(); }
+});
+
+test('only explicit current-account long-lived token metadata counts, never user sessions', async () => {
+  const responses = { 'config/auth/list': [{ name: 'QA', refresh_tokens: [{ type: 'normal' }] }], 'auth/refresh_tokens': [{ type: 'normal' }, { type: 'long_lived_access_token' }, { type: 'system' }] };
+  const { data, findingsHtml } = await audit(null, {}, responses);
+  const tokens = [...data.findings.info, ...data.findings.warning].filter(f => f.id === 'access_tokens' || f.id === 'many_tokens');
+  assert.equal(tokens.length, 1);
+  assert.match(tokens[0].title, /1 long-lived/);
+  assert.match(tokens[0].desc, /current account|current administrator/i);
+  assert.doesNotMatch(tokens[0].title, /user\(s\)/);
+  assert.doesNotMatch(findingsHtml, /normal|system token|last_used_ip/);
+});
+
+test('unavailable or malformed token metadata is explicitly not checked, not silently empty', async () => {
+  for (const response of [new Error('unauthorized'), null, {}, [{}]]) {
+    const { data } = await audit(null, {}, { 'auth/refresh_tokens': response, 'config/auth/list': [{ name: 'QA', refresh_tokens: [{ type: 'normal' }] }] });
+    assert.ok(data.findings.info.some(f => f.id === 'access_tokens_unavailable' && /not checked/i.test(f.title)));
+    assert.ok(![...data.findings.info, ...data.findings.warning].some(f => f.id === 'access_tokens' || f.id === 'many_tokens'));
+  }
+});
+
+test('an available token metadata list with only sessions reports measured zero for the current account', async () => {
+  const { data } = await audit(null, {}, { 'auth/refresh_tokens': [{ type: 'normal' }] });
+  const token = data.findings.info.find(f => f.id === 'access_tokens');
+  assert.ok(token);
+  assert.match(token.title, /0 long-lived/);
+  assert.match(token.desc, /current account|current administrator/i);
 });

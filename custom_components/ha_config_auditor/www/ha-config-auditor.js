@@ -1203,13 +1203,17 @@ class HAConfigAuditor extends HTMLElement {
 
       // Fetch config entries (integrations)
       let cfgEntries = [];
+      let integrationsAvailable = false;
       try {
         const entries = await callWS({type: 'config_entries/get'});
-        cfgEntries = entries || [];
+        if (Array.isArray(entries)) {
+          cfgEntries = entries;
+          integrationsAvailable = true;
+        }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
       if (!isCurrent()) return;
-      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
+      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, integrationsAvailable, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
     this._saveScanData();
 
@@ -1959,9 +1963,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     </div>`;
     const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
     const addonsDisplay = d.addonsAvailable === true ? String(d.addons.length) : 'N/A';
-    const integrationsDisplay = d.integrations?.length || 0;
+    const integrationsDisplay = d.integrationsAvailable === true ? String(d.integrations.length) : 'N/A';
     const usersDisplay = d.usersAvailable === true ? String(d.users.length) : 'N/A';
-    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Integrations</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.integrationsAvailable === true ? 'Integrations' : 'Integrations unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
     if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
     if (d.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
     if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString()}</div>`; }
@@ -2024,19 +2028,19 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     const externalUrl = this._hass.config?.external_url || '';
     const internalUrl = this._hass.config?.internal_url || '';
 
-    html += `<div class="finding ${externalUrl.startsWith('https://') ? 'pass' : externalUrl.startsWith('http://') ? 'critical' : 'info'}">`;
+    html += `<div class="finding ${externalUrl.startsWith('http://') ? 'warning' : 'info'}">`;
     if (externalUrl.startsWith('https://')) {
-      html += `<div class="finding-header"><span class="finding-icon">\u2705</span><span class="finding-title">External URL (HTTPS)</span><span class="finding-badge badge-pass">Secure</span></div>`;
+      html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">External URL configured for HTTPS</span><span class="finding-badge badge-info">Not tested</span></div>`;
     } else if (externalUrl.startsWith('http://')) {
-      html += `<div class="finding-header"><span class="finding-icon">\u{1F6A8}</span><span class="finding-title">External URL (HTTP)</span><span class="finding-badge badge-critical">INSECURE</span></div>`;
+      html += `<div class="finding-header"><span class="finding-icon">\u26A0</span><span class="finding-title">External URL configured for HTTP</span><span class="finding-badge badge-warning">Review configuration</span></div>`;
     } else {
       html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">No External URL</span></div>`;
     }
-    html += `<div class="finding-desc">${_esc(externalUrl || 'Not configured')}</div></div>`;
+    html += `<div class="finding-desc">${_esc(externalUrl || 'Not configured')}. Remote endpoint, reachability and certificate were not tested.</div></div>`;
 
-    html += `<div class="finding ${internalUrl.startsWith('https://') ? 'pass' : 'info'}">`;
+    html += '<div class="finding info">';
     html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Internal URL</span></div>`;
-    html += `<div class="finding-desc">${_esc(internalUrl || 'http://homeassistant.local:8123 (default)')}</div></div>`;
+    html += `<div class="finding-desc">${_esc(internalUrl || 'Not configured')}. Endpoint and certificate were not tested.</div></div>`;
 
     // Network info from hass.config
     const haConfig = this._hass.config || {};
@@ -2050,9 +2054,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span>${_esc(hi.operating_system)}</span>`;
     if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span>${_esc(hi.supervisor)}</span>`;
     html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span>${_esc(haConfig.time_zone || 'N/A')}</span>`;
-    const integrationCount = d.integrations?.length || (haConfig.components || []).length;
-    const componentCount = (haConfig.components || []).length;
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount > 0 ? integrationCount + ' entries' : componentCount > 0 ? componentCount + ' components' : 'N/A'}</span>`;
+    const integrationCount = d.integrationsAvailable === true ? d.integrations.length + ' entries' : 'N/A';
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount}</span>`;
     html += '</div></div></div>';
 
     // Network Interfaces from Supervisor
@@ -2132,7 +2135,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   _renderIntegrations(d) { return this._renderIntegrationsSection(d); }
 
   _renderIntegrationsSection(d) {
-    if (!d.integrations || !d.integrations.length) return '<div class="empty-msg">No integrations configured</div>';
+    if (d.integrationsAvailable !== true) return '<div class="empty-msg">Integration inventory is unavailable; configured count was not measured. Check permissions or use Refresh to retry.</div>';
+    if (!d.integrations.length) return '<div class="empty-msg">No integrations configured</div>';
     const hacsInts = d.integrations.filter(e => e.source === 'hacs' || e.source === 'custom');
     const coreInts = d.integrations.filter(e => e.source !== 'hacs' && e.source !== 'custom');
     const errorInts = d.integrations.filter(e => e.state === 'setup_error');
