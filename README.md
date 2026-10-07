@@ -41,17 +41,20 @@ instead of guessing.
    for disabled protection mode, missing auto-update, host networking,
    privileged access, exposed ports without Ingress, and known "risky"
    services (SSH, Samba, FTP, Telnet).
-3. **Network & exposure.** External/internal URL scheme (HTTPS vs. plain
-   HTTP), certificate management (DuckDNS/Nabu Casa auto-renewed vs. manual),
-   CORS, Nabu Casa Cloud status, and Supervisor network interfaces
-   (`/network/info`) are all reviewed for exposure risks.
+3. **Network & exposure.** Configured URL schemes and loaded Cloud component
+   are reported as configuration evidence. Remote reachability, certificate
+   validity/renewal, subscription and active tunnel status are not tested.
+   Supervisor interface metadata preserves explicit enabled/connected states;
+   unavailable values are N/A, and enabled configuration does not prove an UP link.
 4. **Users & auth.** Registered users (`config/auth/list`) are checked for
-   multiple owner accounts, local-only restriction, and long-lived access
-   tokens (`auth/long_lived_access_token/list`); deprecated
-   `legacy_api_password` and `trusted_networks` auth providers are flagged if
-   present.
+   multiple owner accounts and local-only restriction. `auth/refresh_tokens`
+   provides metadata for the **current account only**: only entries explicitly
+   typed `long_lived_access_token` count as long-lived tokens; ordinary sessions
+   are excluded. No token values or metadata are stored. Denied, unsupported or
+   malformed metadata is explicitly **not checked**; other users' tokens are not
+   measured. The integration separately checks configured auth providers.
 5. **Integrations, entities & backups.** Integrations (`config_entries/get`)
-   are listed by source and status; entity IDs are scanned for cameras,
+   are listed by config-flow source and setup status, which do not prove Core/HACS origin. A measured empty inventory differs from an unavailable inventory; entity IDs are scanned for cameras,
    person trackers, shell commands and webhook triggers; backups
    (`/backups`) are checked for missing encryption; a running Mosquitto
    add-on has its anonymous-access setting verified.
@@ -127,7 +130,7 @@ checks are then reported as unavailable.
   tabs.
 - Pass / Warning / Failed / Info findings with actionable fix suggestions.
 - Supervisor/OS/Core update checks, add-on hygiene, SSL/exposure checks,
-  user and token review, backup-encryption and MQTT-auth checks.
+  user review and current-account token counts, backup-encryption and MQTT-auth checks.
 - Bundled Bento Design System (light + dark mode, follows your HA theme,
   mobile-friendly).
 - Self-contained — no shared HA Tools dependency.

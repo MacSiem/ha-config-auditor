@@ -1,5 +1,9 @@
 ## 6.0.1 (2026-10-07)
 
+- Distinguish unavailable integration inventories from measured empty lists in Overview, Integrations and Network; display config-flow source without guessing Core/HACS origin.
+- Describe configured URL schemes and a loaded Cloud component without claiming tested TLS, active remote access or a default internal URL; preserve unknown adapter state and zero signal.
+- Count only explicitly typed long-lived tokens in current-account metadata from the supported API, exclude login sessions, and show unavailable checks explicitly without storing metadata.
+
 - Keep completed findings visible and keyboard focus intact when the Home Assistant language changes; configuration edits and programmatic tab changes also retain visible results.
 - Add a visible Refresh action to the card and sidebar panel so unavailable checks can be retried without navigation.
 - Stop pending card reads after the card is detached; reconnecting starts a fresh audit.
