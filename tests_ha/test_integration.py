@@ -19,6 +19,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ha_config_auditor import audit
 from custom_components.ha_config_auditor import websocket_api as auditor_ws
+from custom_components.ha_config_auditor import frontend as auditor_frontend
 from custom_components.ha_config_auditor.const import (
     CARD_URL,
     CONF_CREATE_REPAIRS,
@@ -110,6 +111,21 @@ async def test_remove_entry_removes_own_resource(hass: HomeAssistant) -> None:
     assert await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert list(hass.data["lovelace"].resources.async_items()) == []
+
+
+async def test_yaml_fallback_removes_only_owned_module_on_unload(hass: HomeAssistant, monkeypatch) -> None:
+    monkeypatch.setattr(auditor_frontend, "_lovelace_mode", lambda _hass: "yaml")
+    entry = await _setup(hass)
+    urls = hass.data[frontend.DATA_EXTRA_MODULE_URL].urls
+    owned = f"{CARD_URL}?v={VERSION}"
+    assert owned in urls
+    frontend.add_extra_js_url(hass, "/local/foreign-module.js")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert owned not in urls
+    assert "/local/foreign-module.js" in urls
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert owned in urls
 
 
 async def test_ws_audit_is_admin_only(hass: HomeAssistant, hass_ws_client, hass_read_only_access_token) -> None:
