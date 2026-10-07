@@ -25,6 +25,22 @@ async function settle(f) {
   assert.equal(f.card._loading, false, 'synthetic audit must finish');
 }
 
+test('detaching the card cancels pending reads and reconnecting audits afresh', async () => {
+  let release; const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture(true, 'en', pending);
+  try {
+    assert.equal(f.requests.length, 1);
+    f.card.remove();
+    release({}); await new Promise(resolve => setTimeout(resolve, 30));
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.card._auditData, null);
+    f.dom.window.document.body.append(f.card);
+    f.card.hass = { ...f.hass };
+    await settle(f);
+    assert.ok(f.requests.length > 1);
+  } finally { f.dom.window.close(); }
+});
+
 test('household and unresolved initial roles do not request privileged audit data', async () => {
   for (const admin of [false, undefined]) {
     const f = fixture(admin);

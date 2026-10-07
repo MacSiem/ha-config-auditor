@@ -93,3 +93,29 @@ test('locale changes retain visible completed findings and the focused tab witho
     assert.equal(f.requests.length, reads);
   } finally { f.dom.window.close(); }
 });
+
+test('configuration edits keep completed results visible without repeating the audit', async () => {
+  const f = await fixture();
+  try {
+    const reads = f.requests.length;
+    f.card.setConfig({ ...f.config, title: 'Changed title' });
+    assert.match(f.card.shadowRoot.querySelector('h2').textContent, /Changed title/);
+    assert.ok(f.card.shadowRoot.getElementById('content').textContent.trim().length > 0);
+    f.card.setActiveTab('critical');
+    assert.match(f.card.shadowRoot.getElementById('content').textContent, /unavailable/i);
+    assert.equal(f.requests.length, reads);
+  } finally { f.dom.window.close(); }
+});
+
+test('visible refresh allows retrying unavailable checks without navigating away', async () => {
+  const f = await fixture();
+  try {
+    const reads = f.requests.length;
+    const refresh = f.card.shadowRoot.querySelector('button.audit-refresh');
+    assert.ok(refresh, 'card and panel need a visible refresh action');
+    refresh.click();
+    for (let i = 0; i < 50 && f.card._loading; i++) await new Promise(resolve => setImmediate(resolve));
+    assert.ok(f.requests.length > reads);
+    assert.ok(f.card.shadowRoot.getElementById('content').textContent.trim().length > 0);
+  } finally { f.dom.window.close(); }
+});
