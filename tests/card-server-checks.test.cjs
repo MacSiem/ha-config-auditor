@@ -38,7 +38,13 @@ function hass(server, config = {}, responses = {}) {
         }
         return [{ name: 'Admin', is_owner: true, is_active: true }];
       }
-      if (msg.type === 'config_entries/get') return [];
+      if (msg.type === 'config_entries/get') {
+        if (Object.hasOwn(responses, msg.type)) {
+          if (responses[msg.type] instanceof Error) throw responses[msg.type];
+          return responses[msg.type];
+        }
+        return [];
+      }
       throw new Error('not supported');
     },
     callApi: async () => { throw new Error('not supported'); },
@@ -62,8 +68,9 @@ async function audit(server, config = {}, responses = {}) {
   const findingsHtml = card._renderFindings(data);
   const addonsHtml = card._renderAddonsSection(data);
   const networkHtml = card._renderNetwork(data);
+  const integrationsHtml = card._renderIntegrationsSection(data);
   w.close();
-  return { data, html, findingsHtml, addonsHtml, networkHtml };
+  return { data, html, findingsHtml, addonsHtml, networkHtml, integrationsHtml };
 }
 
 const ids = (list) => list.map((f) => f.id);
@@ -169,4 +176,49 @@ test('a measured empty or populated user inventory retains its actual count', as
     assert.equal(label.previousElementSibling.textContent, count);
     dom.window.close();
   }
+});
+
+
+test('denied or malformed integration inventory is unavailable in all visible summaries', async () => {
+  for (const response of [new Error('unauthorized'), null, { error: 'unavailable' }]) {
+    const { html, integrationsHtml, networkHtml } = await audit(null, { components: ['frontend', 'http'] }, { 'config_entries/get': response });
+    const dom = new JSDOM(html);
+    try {
+      const label = [...dom.window.document.querySelectorAll('div')].find(el => el.textContent === 'Integrations unavailable');
+      assert.ok(label, 'failed inventory must not show a measured zero');
+      assert.equal(label.previousElementSibling.textContent, 'N/A');
+      assert.match(integrationsHtml, /unavailable/i);
+      assert.doesNotMatch(integrationsHtml, /No integrations configured/);
+      assert.match(networkHtml, /Integrations<\/span><span>N\/A/);
+      assert.doesNotMatch(networkHtml, /2 entries/);
+    } finally { dom.window.close(); }
+  }
+});
+
+test('measured empty and populated integration inventories keep their count without component fallback', async () => {
+  for (const [response, count] of [[[], '0'], [[{ domain: 'qa', title: 'QA', source: 'user', state: 'loaded' }], '1']]) {
+    const { html, networkHtml } = await audit(null, { components: ['frontend', 'http'] }, { 'config_entries/get': response });
+    const dom = new JSDOM(html);
+    try {
+      const label = [...dom.window.document.querySelectorAll('div')].find(el => el.textContent === 'Integrations');
+      assert.ok(label);
+      assert.equal(label.previousElementSibling.textContent, count);
+      assert.match(networkHtml, new RegExp('Integrations<\\/span><span>' + count + ' entries'));
+    } finally { dom.window.close(); }
+  }
+});
+
+test('Network HTTPS details describe configuration without claiming tested security', async () => {
+  const { networkHtml } = await audit(null, { external_url: 'https://example.invalid', internal_url: 'https://local.invalid' });
+  const dom = new JSDOM(networkHtml);
+  try {
+    const external = [...dom.window.document.querySelectorAll('.finding')].find(el => el.textContent.includes('example.invalid'));
+    const internal = [...dom.window.document.querySelectorAll('.finding')].find(el => el.textContent.includes('local.invalid'));
+    assert.ok(external && internal);
+    for (const finding of [external, internal]) {
+      assert.ok(!finding.classList.contains('pass'), 'URL syntax cannot prove a secure connection');
+      assert.doesNotMatch(finding.textContent, /Secure|INSECURE/);
+      assert.match(finding.textContent, /not tested|not checked/i);
+    }
+  } finally { dom.window.close(); }
 });
