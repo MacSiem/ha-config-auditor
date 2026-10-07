@@ -1,4 +1,4 @@
-## 6.0.1 (unreleased)
+## 6.0.1 (2026-10-07)
 
 - Keep completed findings visible and keyboard focus intact when the Home Assistant language changes; configuration edits and programmatic tab changes also retain visible results.
 - Add a visible Refresh action to the card and sidebar panel so unavailable checks can be retried without navigation.
@@ -7,8 +7,6 @@
 - Describe narrowly bounded public proxy addresses accurately instead of calling them private.
 - Remove only the integration-owned YAML fallback module during unload and register it again on setup, preserving foreign modules.
 - Validate against Home Assistant 2025.2.0, 2026.9.4 and 2026.10.0b2.
-
-## Unreleased — audit authority lifecycle
 
 - Translate first-run guidance and optional support labels during ordinary Polish/English locale updates; preserve dismissal choices and existing audit results.
 
