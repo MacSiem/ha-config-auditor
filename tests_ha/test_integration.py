@@ -152,6 +152,24 @@ async def test_trusted_proxies_classification(hass: HomeAssistant) -> None:
     assert (await audit._check_trusted_proxies(hass))[0].status == "pass"
 
 
+async def test_narrow_public_proxy_is_described_honestly(hass: HomeAssistant) -> None:
+    hass.http = SimpleNamespace(trusted_proxies=[ip_network("8.8.8.8/32")], app={})
+    finding = (await audit._check_trusted_proxies(hass))[0]
+    assert finding.status == "pass"
+    assert "private" not in finding.title.lower()
+    assert finding.evidence["trusted_proxies"] == ["8.8.8.8/32"]
+
+
+async def test_ws_audit_rejects_unloaded_integration(hass: HomeAssistant, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
+    msg = await client.receive_json()
+    assert msg["success"] is False
+    assert msg["error"]["code"] == "unavailable"
+
+
 async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> None:
     hass.config.api = SimpleNamespace(use_ssl=False)
     hass.config.external_url = "http://my-home.example.com:8123"
