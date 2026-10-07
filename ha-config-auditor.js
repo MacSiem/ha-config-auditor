@@ -926,15 +926,22 @@ class HAConfigAuditor extends HTMLElement {
         findings.info.push({ id: 'port_exposure', title: `${portExposingAddons.length} addon(s) expose host ports`, desc: portExposingAddons.map(a => (a.name) + ': ' + Object.entries(a.ports || {}).filter(([, c]) => c?.host_port).map(([p, c]) => p + '\u2192' + c.host_port).join(', ')).join('; '), fix: 'Verify each exposed port is necessary. Use Ingress when available to avoid port exposure.' });
       }
 
-      // Long-lived access tokens check
+      // The supported endpoint exposes metadata for the current account only.
+      // Retain only a count by explicit token type; never persist token metadata.
       try {
-        const llat = await callWS({ type: 'auth/long_lived_access_token/list' }).catch(() => []);
-        if (llat && llat.length > 5) {
-          findings.warning.push({ id: 'many_tokens', title: `${llat.length} long-lived access tokens`, desc: 'Many active access tokens increase attack surface', fix: 'Review and revoke unused tokens at Profile \u2192 Long-lived access tokens' });
-        } else if (llat && llat.length > 0) {
-          findings.info.push({ id: 'access_tokens', title: `${llat.length} long-lived access token(s)`, desc: 'Review periodically for unused tokens' });
-        }
-      } catch(e) { console.debug('[config-auditor]', e.message); }
+        const metadata = await callWS({ type: 'auth/refresh_tokens' });
+        const types = new Set(['normal', 'system', 'long_lived_access_token']);
+        if (!Array.isArray(metadata) || !metadata.every(t => t && types.has(t.type))) throw new TypeError('Unexpected token metadata');
+        const count = metadata.filter(t => t.type === 'long_lived_access_token').length;
+        findings[count > 5 ? 'warning' : 'info'].push({
+          id: count > 5 ? 'many_tokens' : 'access_tokens',
+          title: `${count} long-lived access token(s) for the current account`,
+          desc: 'Only the current account token types were counted. Other users were not checked; ordinary login sessions are excluded.',
+          fix: 'Review unused tokens in your Profile. Token values were not read or stored.'
+        });
+      } catch(e) {
+        findings.info.push({ id: 'access_tokens_unavailable', title: 'Long-lived access tokens not checked', desc: 'Current-account token metadata is unavailable or unsupported. Other users were not checked. Review tokens manually in your Profile.' });
+      }
 
       // Camera exposure check
       const cameraEntities = allEntities.filter(e => e.startsWith('camera.'));
@@ -1029,14 +1036,6 @@ class HAConfigAuditor extends HTMLElement {
         });
         if (webhookCount > 0) {
           findings.info.push({ id: 'webhooks', title: `${webhookCount} automation(s)/script(s) with webhook(s)`, desc: 'Webhooks expose endpoints that can be triggered from the internet', fix: 'Ensure webhook URLs are not shared publicly. Use strong secrets in webhook URLs.' });
-        }
-      } catch(e) { console.debug('[config-auditor]', e.message); }
-
-      // NEW CHECK: Long-lived access tokens
-      try {
-        const tokenCount = users.filter(u => u.refresh_tokens && u.refresh_tokens.length > 0).length;
-        if (tokenCount > 0) {
-          findings.info.push({ id: 'access_tokens', title: `${tokenCount} user(s) with long-lived access token(s)`, desc: 'Access tokens should be rotated regularly and kept secure', fix: 'Rotate tokens periodically. Remove unused tokens from Settings \u2192 Users' });
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
@@ -1188,10 +1187,10 @@ class HAConfigAuditor extends HTMLElement {
         try {
           const netWS = await callWS({ type: 'network' });
           if (netWS?.adapters) {
-            networkInfo = netWS.adapters.filter(a => a.enabled).map(a => ({
-              interface: a.name, type: a.name.startsWith('wlan') ? 'wireless' : 'ethernet',
-              enabled: a.enabled, connected: a.enabled, mac: '',
-              ipv4: { address: a.ipv4 ? a.ipv4.map(ip => ip.address + '/' + ip.network_prefix) : [], method: a.auto ? 'auto' : 'manual', gateway: null, nameservers: [] }
+            networkInfo = netWS.adapters.filter(a => a && typeof a.name === 'string').map(a => ({
+              interface: a.name, type: 'unknown',
+              enabled: a.enabled, mac: '',
+              ipv4: { address: a.ipv4 ? a.ipv4.map(ip => ip.address + '/' + ip.network_prefix) : [], method: 'N/A', gateway: null, nameservers: [] }
             }));
           }
         } catch(ne2) { console.debug('[ha-config-auditor] caught:', ne2); }
@@ -1206,7 +1205,7 @@ class HAConfigAuditor extends HTMLElement {
       let integrationsAvailable = false;
       try {
         const entries = await callWS({type: 'config_entries/get'});
-        if (Array.isArray(entries)) {
+        if (Array.isArray(entries) && entries.every(e => e && typeof e.domain === 'string')) {
           cfgEntries = entries;
           integrationsAvailable = true;
         }
@@ -2018,9 +2017,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     const hasCloud = (this._hass.config?.components || []).includes('cloud');
     html += '<div class="section-title">\u{1F310} Remote Access</div>';
     if (hasCloud) {
-      html += `<div class="finding pass"><div class="finding-header"><span class="finding-icon">\u2705</span><span class="finding-title">Nabu Casa Cloud</span><span class="finding-badge badge-pass">ACTIVE</span></div><div class="finding-desc">Secure remote access via Home Assistant Cloud (Nabu Casa). Encrypted tunnel, no port forwarding needed.</div></div>`;
+      html += `<div class="finding info"><div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Nabu Casa Cloud component loaded</span><span class="finding-badge badge-info">Not checked</span></div><div class="finding-desc">The cloud component is loaded. Subscription, active remote tunnel, reachability and TLS were not checked.</div></div>`;
     } else {
-      html += `<div class="finding info"><div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">No Cloud Service</span></div><div class="finding-desc">Home Assistant Cloud (Nabu Casa) is not configured. If you need remote access, it's the safest option.</div></div>`;
+      html += `<div class="finding info"><div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Cloud component not loaded</span></div><div class="finding-desc">The cloud component is not loaded. Configuration and remote access status were not checked.</div></div>`;
     }
 
     // URLs
@@ -2040,7 +2039,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 
     html += '<div class="finding info">';
     html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Internal URL</span></div>`;
-    html += `<div class="finding-desc">${_esc(internalUrl || 'Not configured')}. Endpoint and certificate were not tested.</div></div>`;
+    html += `<div class="finding-desc">${_esc(internalUrl || 'N/A — no internal URL configured')}. Endpoint and certificate were not tested.</div></div>`;
 
     // Network info from hass.config
     const haConfig = this._hass.config || {};
@@ -2065,11 +2064,11 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       ifaces.forEach(iface => {
         const name = iface.interface || iface.name || 'unknown';
         const type = iface.type || 'unknown';
-        const enabled = iface.enabled !== false;
+        const enabled = iface.enabled === true ? 'Enabled' : iface.enabled === false ? 'Disabled' : 'N/A';
         const ipv4 = iface.ipv4 || {};
         const addresses = ipv4.address || [];
         const gateway = ipv4.gateway || 'N/A';
-        const method = ipv4.method || 'auto';
+        const method = ipv4.method || 'N/A';
         const dns = (iface.ipv4?.nameservers || []).join(', ') || 'N/A';
         const mac = iface.mac || 'N/A';
         const wifi = iface.wifi || null;
@@ -2078,17 +2077,18 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         html += '<div class="finding-header">';
         html += '<span class="finding-icon">' + (type === 'wireless' ? '\u{1F4F6}' : '\u{1F50C}') + '</span>';
         html += '<span class="finding-title">' + _esc(name) + ' (' + _esc(type) + ')</span>';
-        html += '<span class="finding-badge ' + (enabled ? 'badge-pass' : 'badge-info') + '">' + (enabled ? 'UP' : 'DOWN') + '</span>';
+        html += '<span class="finding-badge badge-info">' + enabled + '</span>';
         html += '</div>';
         html += '<div class="finding-desc"><div style="display:grid;grid-template-columns:100px 1fr;gap:4px 12px;font-size:12px;">';
         if (addresses.length > 0) html += '<span style="font-weight:600">IP</span><span>' + _esc(addresses.join(', ')) + '</span>';
+        html += '<span style="font-weight:600">Link status</span><span>' + (iface.connected === true ? 'Connected' : iface.connected === false ? 'Disconnected' : 'N/A') + '</span>';
         html += '<span style="font-weight:600">Gateway</span><span>' + _esc(gateway) + '</span>';
         html += '<span style="font-weight:600">DNS</span><span>' + _esc(dns) + '</span>';
         html += '<span style="font-weight:600">MAC</span><span><code style="font-size:11px">' + _esc(mac) + '</code></span>';
         html += '<span style="font-weight:600">Method</span><span>' + _esc(method) + '</span>';
         if (wifi) {
           html += '<span style="font-weight:600">SSID</span><span>' + _esc(wifi.ssid || 'N/A') + '</span>';
-          html += '<span style="font-weight:600">Signal</span><span>' + _esc(wifi.signal ? wifi.signal + '%' : 'N/A') + '</span>';
+          html += '<span style="font-weight:600">Signal</span><span>' + _esc(typeof wifi.signal === 'number' && Number.isFinite(wifi.signal) ? wifi.signal + '%' : 'N/A') + '</span>';
         }
         html += '</div></div></div>';
       });
@@ -2137,21 +2137,20 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   _renderIntegrationsSection(d) {
     if (d.integrationsAvailable !== true) return '<div class="empty-msg">Integration inventory is unavailable; configured count was not measured. Check permissions or use Refresh to retry.</div>';
     if (!d.integrations.length) return '<div class="empty-msg">No integrations configured</div>';
-    const hacsInts = d.integrations.filter(e => e.source === 'hacs' || e.source === 'custom');
-    const coreInts = d.integrations.filter(e => e.source !== 'hacs' && e.source !== 'custom');
+    const knownSource = d.integrations.filter(e => typeof e.source === 'string' && e.source.length > 0).length;
     const errorInts = d.integrations.filter(e => e.state === 'setup_error');
     let html = `<div style="margin-top:20px"><h3 style="margin:0 0 12px;font-size:15px;color:var(--bento-text);">\u{1F50C} Integrations (${d.integrations.length})</h3>`;
     html += `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">`;
-    html += `<div style="padding:4px 10px;background:rgba(33,150,243,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">\u{1F4E6} Core: ${coreInts.length}</div>`;
-    html += `<div style="padding:4px 10px;background:rgba(255,152,0,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">\u{1F3EA} HACS: ${hacsInts.length}</div>`;
+    html += `<div style="padding:4px 10px;background:rgba(33,150,243,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">Reported flow source: ${knownSource}</div>`;
+    html += `<div style="padding:4px 10px;background:rgba(255,152,0,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">Flow source unavailable: ${d.integrations.length - knownSource}</div>`;
     if (errorInts.length > 0) html += `<div style="padding:4px 10px;background:rgba(244,67,54,0.08);border-radius:6px;font-size:11px;color:#f44336;">\u26A0 Errors: ${errorInts.length}</div>`;
     html += `</div>`;
-    html += `<div class="table-container"><table class="entity-table"><thead><tr><th>Integration</th><th>Domain</th><th>Source</th><th>Status</th></tr></thead><tbody>`;
+    html += `<div class="table-container"><table class="entity-table"><thead><tr><th>Integration</th><th>Domain</th><th>Config-flow source</th><th>Status</th></tr></thead><tbody>`;
     d.integrations.forEach(e => {
       const statusColor = e.state === 'loaded' ? '#4caf50' : e.state === 'setup_error' ? '#f44336' : e.state === 'not_loaded' ? '#ff9800' : '#9e9e9e';
-      const isHacs = e.source === 'hacs' || e.source === 'custom';
+      const source = typeof e.source === 'string' && e.source.length > 0 ? e.source : 'N/A';
       html += `<tr><td>${_esc(e.title || e.domain)}</td><td style="font-family:monospace;font-size:12px">${_esc(e.domain)}</td>`;
-      html += `<td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;background:${isHacs ? 'rgba(255,152,0,0.1);color:#f57c00' : 'rgba(33,150,243,0.1);color:#1976d2'}">${isHacs ? '\u{1F3EA} HACS' : '\u{1F4E6} Core'}</span></td>`;
+      html += `<td><span class="finding-badge badge-info">${_esc(source)}</span></td>`;
       html += `<td style="color:${statusColor};font-weight:600">\u25CF ${_esc(e.state || 'unknown')}</td></tr>`;
     });
     html += '</tbody></table></div></div>';
