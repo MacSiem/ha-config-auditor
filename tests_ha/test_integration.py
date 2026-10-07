@@ -206,16 +206,18 @@ async def test_ws_discards_pending_audit_after_admin_loss(hass: HomeAssistant, h
     client = await hass_ws_client(hass)
     await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
     await started.wait()
-    original = hass_admin_user.group_ids
+    original = hass_admin_user.groups
     try:
-        hass_admin_user.group_ids = ["system-users"]
+        hass_admin_user.groups = []
+        hass_admin_user.invalidate_cache()
         resume.set()
         msg = await client.receive_json()
         assert msg["success"] is False
         assert msg["error"]["code"] == "unauthorized"
         assert "Synthetic private audit" not in repr(msg)
     finally:
-        hass_admin_user.group_ids = original
+        hass_admin_user.groups = original
+        hass_admin_user.invalidate_cache()
 
 
 async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> None:

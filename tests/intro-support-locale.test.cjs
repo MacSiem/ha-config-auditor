@@ -34,6 +34,7 @@ test('ordinary EN/PL-region/EN updates translate all first-run steps and dismiss
     assert.match(intro.querySelectorAll('li')[1].textContent, /wskazów/);
     assert.equal(intro.querySelector('button').getAttribute('aria-label'), 'Ukryj instrukcję');
     assert.equal(intro.querySelector('button').title, 'Ukryj instrukcję');
+    assert.equal(root.querySelector('.audit-refresh').textContent, 'Odśwież');
     assert.equal(f.card._activeTab, 'critical');
     assert.equal(f.card._config.title, f.config.title);
     f.card.hass = { ...f.hass, language: 'en' };

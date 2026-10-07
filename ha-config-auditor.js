@@ -678,6 +678,8 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   _updateLocale() {
+    const refresh = this.shadowRoot.querySelector('.audit-refresh');
+    if (refresh) refresh.textContent = this._t.refresh;
     const intro = this._lang === 'pl' ? _LOCAL_INTRO_PL : _LOCAL_INTRO;
     const banner = this.shadowRoot.querySelector('.intro-banner[data-intro="ha-config-auditor"]');
     if (banner) {
