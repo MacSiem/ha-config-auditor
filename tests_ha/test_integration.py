@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from ipaddress import ip_network
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ha_config_auditor import audit
+from custom_components.ha_config_auditor import websocket_api as auditor_ws
 from custom_components.ha_config_auditor.const import (
     CARD_URL,
     CONF_CREATE_REPAIRS,
@@ -168,6 +170,52 @@ async def test_ws_audit_rejects_unloaded_integration(hass: HomeAssistant, hass_w
     msg = await client.receive_json()
     assert msg["success"] is False
     assert msg["error"]["code"] == "unavailable"
+
+
+async def test_ws_discards_pending_audit_after_unload(hass: HomeAssistant, hass_ws_client, monkeypatch) -> None:
+    entry = await _setup(hass)
+    started, resume = asyncio.Event(), asyncio.Event()
+
+    async def delayed(_hass):
+        started.set()
+        await resume.wait()
+        return {"findings": [{"title": "Synthetic private audit"}]}
+
+    monkeypatch.setattr(auditor_ws, "async_run_audit", delayed)
+    client = await hass_ws_client(hass)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
+    await started.wait()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    resume.set()
+    msg = await client.receive_json()
+    assert msg["success"] is False
+    assert msg["error"]["code"] == "unavailable"
+    assert "Synthetic private audit" not in repr(msg)
+
+
+async def test_ws_discards_pending_audit_after_admin_loss(hass: HomeAssistant, hass_ws_client, hass_admin_user, monkeypatch) -> None:
+    await _setup(hass)
+    started, resume = asyncio.Event(), asyncio.Event()
+
+    async def delayed(_hass):
+        started.set()
+        await resume.wait()
+        return {"findings": [{"title": "Synthetic private audit"}]}
+
+    monkeypatch.setattr(auditor_ws, "async_run_audit", delayed)
+    client = await hass_ws_client(hass)
+    await client.send_json({"id": 1, "type": f"{DOMAIN}/audit"})
+    await started.wait()
+    original = hass_admin_user.group_ids
+    try:
+        hass_admin_user.group_ids = ["system-users"]
+        resume.set()
+        msg = await client.receive_json()
+        assert msg["success"] is False
+        assert msg["error"]["code"] == "unauthorized"
+        assert "Synthetic private audit" not in repr(msg)
+    finally:
+        hass_admin_user.group_ids = original
 
 
 async def test_transport_classification(hass: HomeAssistant, monkeypatch) -> None:
