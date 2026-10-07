@@ -57,7 +57,7 @@ instead of guessing.
    add-on has its anonymous-access setting verified.
 6. **Findings, not fixes.** Every check produces a Pass, Warning, Failed or
    Info finding with a description and, where relevant, a one-line
-   suggested fix. The audit re-runs automatically every 5 minutes while the
+   suggested fix. The audit re-runs on Home Assistant updates after five minutes while the
    card is visible — nothing is changed in your configuration automatically.
 
 ### What is automatic vs. manual
@@ -182,4 +182,6 @@ The integration reads security settings and allowed configuration files on your 
 
 See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
 
-First-run guidance and optional support labels follow the Home Assistant language (Polish or English, including Polish regional locales). Switching language preserves the selected tab, authored title and dismissal choices, and does not trigger another audit. The Findings and Tips names in the guidance match the current tab labels.
+First-run guidance, Refresh and optional support labels follow the Home Assistant language (Polish or English, including Polish regional locales). Switching language preserves visible findings, keyboard focus, the selected tab, authored title and dismissal choices, and does not trigger another audit. The Findings and Tips names in the guidance match the current tab labels. Use Refresh in the card or sidebar panel to retry unavailable checks without navigating away. The main findings and tab labels remain in English.
+
+Unloading the integration disables its server audit command and removes its own YAML fallback module. Pending replies are discarded if the integration is unloaded or administrator permissions are lost. Foreign dashboard resources and modules are preserved.
