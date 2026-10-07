@@ -73,3 +73,23 @@ test('dismissed instruction and support remain hidden through ordinary locale up
     assert.equal(f.requests.length, reads);
   } finally { f.dom.window.close(); }
 });
+
+test('locale changes retain visible completed findings and the focused tab without reading again', async () => {
+  const f = await fixture();
+  try {
+    const root = f.card.shadowRoot;
+    const tab = root.querySelector('[data-tab="critical"]');
+    tab.click(); tab.focus();
+    const content = root.getElementById('content');
+    assert.ok(content.textContent.trim().length > 0);
+    const before = content.textContent;
+    const reads = f.requests.length;
+    for (const language of ['pl-PL', 'en']) {
+      f.card.hass = { ...f.hass, language };
+      assert.equal(root.getElementById('content'), content, 'locale must keep the visible result node');
+      assert.equal(content.textContent, before, 'completed findings stay visible');
+      assert.equal(root.activeElement, tab, 'keyboard focus remains on the same tab');
+    }
+    assert.equal(f.requests.length, reads);
+  } finally { f.dom.window.close(); }
+});
