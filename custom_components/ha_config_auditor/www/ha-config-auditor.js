@@ -637,7 +637,7 @@ class HAConfigAuditor extends HTMLElement {
         this._lastAuditTime = now;
         this._runAudit();
       }
-      if (previousLanguage !== this._lang) { this._lastHtml = ''; this._render(); }
+      if (previousLanguage !== this._lang) this._updateLocale();
       // Throttle render to 60s — audit results are static
       if (now - (this._lastRenderTime || 0) < 60000) {
         return;
@@ -675,6 +675,24 @@ class HAConfigAuditor extends HTMLElement {
       },
     };
     return T[this._lang] || T.en;
+  }
+
+  _updateLocale() {
+    const intro = this._lang === 'pl' ? _LOCAL_INTRO_PL : _LOCAL_INTRO;
+    const banner = this.shadowRoot.querySelector('.intro-banner[data-intro="ha-config-auditor"]');
+    if (banner) {
+      banner.querySelector('.intro-headline').textContent = '💡 ' + intro.headline;
+      banner.querySelectorAll('.intro-steps li').forEach((item, index) => { item.textContent = intro.steps[index]; });
+      const dismiss = this._lang === 'pl' ? 'Ukryj instrukcję' : 'Dismiss';
+      const button = banner.querySelector('.intro-dismiss');
+      button.title = dismiss;
+      button.setAttribute('aria-label', dismiss);
+    }
+    const support = this.shadowRoot.querySelector('.donate-section[data-source="own-card"]');
+    if (support) {
+      support.querySelector('a').textContent = this._lang === 'pl' ? 'Dobrowolne wsparcie HA Tools' : 'Optional support for HA Tools';
+      support.querySelector('.support-dismiss').setAttribute('aria-label', this._lang === 'pl' ? 'Ukryj link wsparcia' : 'Dismiss support link');
+    }
   }
 
   setConfig(config) {
