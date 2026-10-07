@@ -336,7 +336,7 @@ async def _check_trusted_proxies(hass: HomeAssistant) -> list[Finding]:
         Finding(
             "http_trusted_proxies",
             STATUS_PASS,
-            "Trusted proxies are limited to private addresses",
+            "Trusted proxies are limited to bounded networks or addresses",
             "Trusted proxies: " + ", ".join(listed) + ".",
             category="network",
             evidence={"trusted_proxies": listed},
