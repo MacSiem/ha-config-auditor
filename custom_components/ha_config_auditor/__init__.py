@@ -101,6 +101,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigAuditorConfigEntr
     if runtime.panel_registered:
         ca_frontend.async_unregister_panel(hass)
         runtime.panel_registered = False
+    if runtime.card_registration == "extra_js_url":
+        ca_frontend.async_unregister_extra_card(hass)
     return True
 
 
