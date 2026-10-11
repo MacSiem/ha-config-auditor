@@ -1,3 +1,9 @@
+## 6.0.2 (2026-10-11)
+
+- Translate tabs, loading, summaries, findings, severities, tips and unavailable/empty states into Polish from the Home Assistant profile language.
+- Apply live EN/PL changes immediately, retaining the active tab, focused tab button, cached audit evidence and counters without repeating an audit.
+- Keep card and integration frontend bundles identical.
+
 ## 6.0.1 (2026-10-07)
 
 - Distinguish unavailable integration inventories from measured empty lists in Overview, Integrations and Network; display config-flow source without guessing Core/HACS origin.

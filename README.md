@@ -11,6 +11,11 @@ changes nothing on its own. It is a review aid, not a security scanner.
 
 [![Version](https://img.shields.io/github/v/release/MacSiem/ha-config-auditor)](https://github.com/MacSiem/ha-config-auditor/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+The card and sidebar panel follow the Home Assistant profile language (English or
+Polish, including `pl-PL`). Since 6.0.2, changing that language translates the
+visible results immediately, preserving the active tab and cached audit data
+without making another audit request. Other profile languages use English.
+
 ## How it works
 
 **Server-verified checks (integration).** The integration runs these on the
