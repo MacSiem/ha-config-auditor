@@ -84,3 +84,23 @@ test('PL/EN switches preserve raw network, host, version and inventory values ma
  }
  }finally{f.dom.window.close();}
 });
+
+test('intro names match localized tabs and Network counts translate without changing entry identifiers', async () => {
+ const f=await fixture('pl');try {
+ const root=f.card.shadowRoot;const data=f.card._auditData;const reads=f.reads();
+ data.integrationsAvailable=true;data.integrations=[{title:'Entry one',domain:'fixture_one',source:'user',state:'setup_retry'},{title:'Entry two',domain:'fixture_two',source:'import',state:'migration_error'}];
+ for(const language of ['pl','en','pl-PL']) {
+  f.card.hass={...f.hass,language};const polish=language.startsWith('pl');
+  const steps=[...root.querySelectorAll('.intro-steps li')].map(node=>node.textContent);
+  for(const [index,tab] of [[1,'critical'],[2,'tips']]) assert.ok(steps[index].includes(root.querySelector(`[data-tab=${tab}]`).textContent), `${language}: guidance refers to the visible tab label`);
+  if(polish) for(const step of steps) assert.doesNotMatch(step,/Findings|Tips/);
+  root.querySelector('[data-tab=network]').click();const content=root.getElementById('content');
+  const label=[...content.querySelectorAll('span')].find(node=>node.textContent===(polish?'Integracje':'Integrations'));
+  assert.equal(label.nextElementSibling.textContent,polish?'Wpisy: 2':'2 entries');
+  root.querySelector('[data-tab=addons]').click();const cells=[...content.querySelectorAll('td')].map(node=>node.textContent);
+  for(const raw of ['user','import']) assert.ok(cells.includes(raw));
+  for(const raw of ['setup_retry','migration_error']) assert.ok(cells.some(value=>value.includes(raw)));
+  assert.equal(f.card._auditData,data);assert.equal(f.reads(),reads);
+ }
+ }finally{f.dom.window.close();}
+});
