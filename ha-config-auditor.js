@@ -2401,13 +2401,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += '<div class="section-title">\u{1F4F6} Network Info</div>';
     html += '<div class="finding info"><div class="finding-desc">';
     html += '<div style="display:grid;grid-template-columns:140px 1fr;gap:6px 12px;font-size:13px;">';
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Location name</span><span>${_esc(haConfig.location_name || this._msg('N/A'))}</span>`;
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">HA Version</span><span>${_esc(haConfig.version || this._msg('N/A'))}</span>`;
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Location name</span><span data-audit-value>${_esc(haConfig.location_name || this._msg('N/A'))}</span>`;
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">HA Version</span><span data-audit-value>${_esc(haConfig.version || this._msg('N/A'))}</span>`;
     const hi = d.hostInfo || {};
-    if (hi.hostname) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Hostname</span><span>${_esc(hi.hostname)}</span>`;
-    if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span>${_esc(hi.operating_system)}</span>`;
-    if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span>${_esc(hi.supervisor)}</span>`;
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span>${_esc(haConfig.time_zone || this._msg('N/A'))}</span>`;
+    if (hi.hostname) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Hostname</span><span data-audit-value>${_esc(hi.hostname)}</span>`;
+    if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span data-audit-value>${_esc(hi.operating_system)}</span>`;
+    if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span data-audit-value>${_esc(hi.supervisor)}</span>`;
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span data-audit-value>${_esc(haConfig.time_zone || this._msg('N/A'))}</span>`;
     const integrationCount = d.integrationsAvailable === true ? d.integrations.length + ' entries' : this._msg('N/A');
     html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount}</span>`;
     html += '</div></div></div>';
@@ -2431,19 +2431,19 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         html += '<div class="finding info" style="margin-bottom:8px">';
         html += '<div class="finding-header">';
         html += '<span class="finding-icon">' + (type === 'wireless' ? '\u{1F4F6}' : '\u{1F50C}') + '</span>';
-        html += '<span class="finding-title">' + _esc(name) + ' (' + _esc(type) + ')</span>';
+        html += '<span class="finding-title" data-audit-value>' + _esc(name) + ' (' + _esc(type) + ')</span>';
         html += '<span class="finding-badge badge-info">' + enabled + '</span>';
         html += '</div>';
         html += '<div class="finding-desc"><div style="display:grid;grid-template-columns:100px 1fr;gap:4px 12px;font-size:12px;">';
-        if (addresses.length > 0) html += '<span style="font-weight:600">IP</span><span>' + _esc(addresses.join(', ')) + '</span>';
+        if (addresses.length > 0) html += '<span style="font-weight:600">IP</span><span data-audit-value>' + _esc(addresses.join(', ')) + '</span>';
         html += '<span style="font-weight:600">Link status</span><span>' + (iface.connected === true ? this._msg('Connected') : iface.connected === false ? this._msg('Disconnected') : this._msg('N/A')) + '</span>';
-        html += '<span style="font-weight:600">Gateway</span><span>' + _esc(gateway) + '</span>';
-        html += '<span style="font-weight:600">DNS</span><span>' + _esc(dns) + '</span>';
-        html += '<span style="font-weight:600">MAC</span><span><code style="font-size:11px">' + _esc(mac) + '</code></span>';
-        html += '<span style="font-weight:600">Method</span><span>' + _esc(method) + '</span>';
+        html += '<span style="font-weight:600">Gateway</span><span data-audit-value>' + _esc(gateway) + '</span>';
+        html += '<span style="font-weight:600">DNS</span><span data-audit-value>' + _esc(dns) + '</span>';
+        html += '<span style="font-weight:600">MAC</span><span data-audit-value><code style="font-size:11px">' + _esc(mac) + '</code></span>';
+        html += '<span style="font-weight:600">Method</span><span data-audit-value>' + _esc(method) + '</span>';
         if (wifi) {
-          html += '<span style="font-weight:600">SSID</span><span>' + _esc(wifi.ssid || this._msg('N/A')) + '</span>';
-          html += '<span style="font-weight:600">Signal</span><span>' + _esc(typeof wifi.signal === 'number' && Number.isFinite(wifi.signal) ? wifi.signal + '%' : this._msg('N/A')) + '</span>';
+          html += '<span style="font-weight:600">SSID</span><span data-audit-value>' + _esc(wifi.ssid || this._msg('N/A')) + '</span>';
+          html += '<span style="font-weight:600">Signal</span><span data-audit-value>' + _esc(typeof wifi.signal === 'number' && Number.isFinite(wifi.signal) ? wifi.signal + '%' : this._msg('N/A')) + '</span>';
         }
         html += '</div></div></div>';
       });
@@ -2460,7 +2460,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         const hasIngress = a.ingress === true;
         const ports = a.ports ? Object.entries(a.ports).map(([port, config]) => `${port}${config.host_port ? `→${config.host_port}` : ''}`).join(', ') : this._msg('N/A');
         const color = hasIngress ? '#4caf50' : a.state === 'started' ? '#ff9800' : '#9e9e9e';
-        html += `<tr><td>${_esc(a.name)}</td><td style="color:${color}">${hasIngress ? '\u2713 ' + this._msg('Yes') : '\u2717 ' + this._msg(this._msg('No'))}</td><td><code style="font-size:12px;background:var(--bento-bg);padding:4px 8px;border-radius:4px">${_esc(ports)}</code></td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'stopped'))}</td></tr>`;
+        html += `<tr><td>${_esc(a.name)}</td><td style="color:${color}">${hasIngress ? '\u2713 ' + this._msg('Yes') : '\u2717 ' + this._msg('No')}</td><td><code style="font-size:12px;background:var(--bento-bg);padding:4px 8px;border-radius:4px">${_esc(ports)}</code></td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'stopped'))}</td></tr>`;
       });
       html += '</tbody></table></div>';
     }
