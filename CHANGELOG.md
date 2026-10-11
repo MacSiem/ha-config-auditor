@@ -2,6 +2,7 @@
 
 - Translate tabs, loading, summaries, findings, severities, tips and unavailable/empty states into Polish from the Home Assistant profile language.
 - Apply live EN/PL changes immediately, retaining the active tab, focused tab button, cached audit evidence and counters without repeating an audit.
+- Match Polish introductory tab references to Wyniki/Wskazówki and translate the integration entry count on Network.
 - Preserve raw host, network, interface and inventory names when they match translated UI labels.
 - Keep card and integration frontend bundles identical.
 

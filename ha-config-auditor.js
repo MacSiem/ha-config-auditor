@@ -511,7 +511,7 @@ const _LOCAL_INTRO = {
 };
 const _LOCAL_INTRO_PL = {
   headline: 'Przegląd konfiguracji i wskazówki dotyczące dobrych praktyk.',
-  steps: ['Przegląd pokazuje liczbę pozytywnych wyników, ostrzeżeń i problemów.', 'W zakładce Findings przeczytaj każdy wynik i wskazówkę jego poprawy.', 'Zakładka Tips zawiera listę dobrych praktyk.']
+  steps: ['Przegląd pokazuje liczbę pozytywnych wyników, ostrzeżeń i problemów.', 'W zakładce Wyniki przeczytaj każdy wynik i wskazówkę jego poprawy.', 'Zakładka Wskazówki zawiera listę dobrych praktyk.']
 };
 const _LOCAL_SUPPORT_KEY = 'ha-config-auditor-support-dismissed';
 const _LOCAL_DONATE_HTML = '<div class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">Optional support for HA Tools</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;padding:2px 6px;min-height:0;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></div>';
@@ -571,6 +571,7 @@ const AUDIT_COPY_PL = {
   "Addons installed": "Zainstalowane dodatki",
   "Addons unavailable": "Dodatki niedostępne",
   "Integrations": "Integracje",
+  "{0} entries": "Wpisy: {0}",
   "Integrations unavailable": "Integracje niedostępne",
   "User accounts": "Konta użytkowników",
   "User accounts unavailable": "Konta użytkowników niedostępne",
@@ -2408,7 +2409,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span data-audit-value>${_esc(hi.operating_system)}</span>`;
     if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span data-audit-value>${_esc(hi.supervisor)}</span>`;
     html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span data-audit-value>${_esc(haConfig.time_zone || this._msg('N/A'))}</span>`;
-    const integrationCount = d.integrationsAvailable === true ? d.integrations.length + ' entries' : this._msg('N/A');
+    const integrationCount = d.integrationsAvailable === true ? this._msg(d.integrations.length + ' entries') : this._msg('N/A');
     html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount}</span>`;
     html += '</div></div></div>';
 
