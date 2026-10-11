@@ -559,7 +559,7 @@ const AUDIT_COPY_PL = {
   "Running configuration best-practices audit...": "Trwa audyt dobrych praktyk konfiguracji...",
   "Audit failed": "Audyt nie powiódł się",
   "Configuration best-practice summary": "Podsumowanie dobrych praktyk konfiguracji",
-  "{0} checks run. Review failed and warning items first, then informational findings.": "Wykonano {0} kontroli. Najpierw przejrzyj niezaliczone kontrole i ostrzeżenia, potem informacje.",
+  "{0} checks run. Review failed and warning items first, then informational findings.": "Liczba wykonanych kontroli: {0}. Najpierw przejrzyj niezaliczone kontrole i ostrzeżenia, potem informacje.",
   "Failed": "Niezaliczone",
   "Warnings": "Ostrzeżenia",
   "Warning": "Ostrzeżenie",
