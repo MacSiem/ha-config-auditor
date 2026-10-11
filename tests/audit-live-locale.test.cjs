@@ -56,3 +56,31 @@ test('server results translate complete status copy and retain escaped raw evide
  f.card.hass={...f.hass,language:'en'};assert.match(content.textContent,/Trusted proxies could not be read \(not checked\)/);assert.match(content.textContent,/An address is banned after 5/);
  }finally{f.dom.window.close();}
 });
+
+test('PL/EN switches preserve raw network, host, version and inventory values matching UI labels', async () => {
+ const f=await fixture('en');try {
+ const data=f.card._auditData;
+ data.hostInfo={hostname:'User',operating_system:'Tips',supervisor:'Warning'};
+ data.networkInterfaces=[{interface:'Tips',type:'Warning',enabled:true,connected:true,mac:'User',ipv4:{address:['Network'],gateway:'Tips',method:'Warning',nameservers:['User']},wifi:{ssid:'Network',signal:42}}];
+ data.usersAvailable=true;data.users=[{name:'Warning',is_active:true}];
+ data.addonsAvailable=true;data.addons=[{name:'Network',version:'User',state:'started',protected:true,auto_update:false,host_network:false,ports:{8123:{host_port:8123}}}];
+ data.integrationsAvailable=true;data.integrations=[{title:'Tips',domain:'Warning',source:'User',state:'loaded'}];
+ const hass={...f.hass,config:{...f.hass.config,location_name:'Network',version:'User',time_zone:'Tips'}};
+ const root=f.card.shadowRoot;const reads=f.reads();
+ for(const language of ['pl','en','pl']) {
+  f.card.hass={...hass,language};root.querySelector('[data-tab=network]').click();
+  const content=root.getElementById('content');
+  const valueFor=label=>[...content.querySelectorAll('span')].find(node=>node.textContent===label)?.nextElementSibling?.textContent;
+  const polish=language==='pl';
+  for(const [en,pl,raw] of [['Location name','Nazwa lokalizacji','Network'],['HA Version','Wersja HA','User'],['Hostname','Nazwa hosta','User'],['OS','System operacyjny','Tips'],['Supervisor','Supervisor','Warning'],['Time zone','Strefa czasowa','Tips'],['IP','IP','Network'],['Gateway','Brama','Tips'],['DNS','DNS','User'],['MAC','MAC','User'],['Method','Metoda','Warning'],['SSID','SSID','Network']]) {
+   assert.equal(valueFor(polish?pl:en),raw,`${language}: ${en} retains raw data`);
+  }
+  assert.ok([...content.querySelectorAll('.finding-title')].some(node=>node.textContent==='Tips (Warning)'));
+  root.querySelector('[data-tab=addons]').click();
+  const cells=[...content.querySelectorAll('td')].map(node=>node.textContent);
+  for(const raw of ['Network','User','Tips','Warning']) assert.ok(cells.includes(raw),`${language}: inventory retains ${raw}`);
+  root.querySelector('[data-tab=users]').click();assert.equal(content.querySelector('td').textContent,'Warning');
+  assert.equal(f.card._auditData,data);assert.equal(f.reads(),reads);
+ }
+ }finally{f.dom.window.close();}
+});
