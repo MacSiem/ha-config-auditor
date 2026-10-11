@@ -11,6 +11,11 @@ changes nothing on its own. It is a review aid, not a security scanner.
 
 [![Version](https://img.shields.io/github/v/release/MacSiem/ha-config-auditor)](https://github.com/MacSiem/ha-config-auditor/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+The card and sidebar panel follow the Home Assistant profile language (English or
+Polish, including `pl-PL`). Since 6.0.2, changing that language translates the
+visible results immediately, preserving the active tab and cached audit data
+without making another audit request. Other profile languages use English.
+
 ## How it works
 
 **Server-verified checks (integration).** The integration runs these on the
@@ -185,6 +190,6 @@ The integration reads security settings and allowed configuration files on your 
 
 See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
 
-First-run guidance, Refresh and optional support labels follow the Home Assistant language (Polish or English, including Polish regional locales). Switching language preserves visible findings, keyboard focus, the selected tab, authored title and dismissal choices, and does not trigger another audit. The Findings and Tips names in the guidance match the current tab labels. Use Refresh in the card or sidebar panel to retry unavailable checks without navigating away. The main findings and tab labels remain in English.
+First-run guidance, Refresh and optional support labels follow the Home Assistant language (Polish or English, including Polish regional locales). Switching language preserves visible findings, keyboard focus, the selected tab, authored title and dismissal choices, and does not trigger another audit. The Findings and Tips names in the guidance match the current tab labels. Use Refresh in the card or sidebar panel to retry unavailable checks without navigating away. Tabs, summaries, findings, tips and unavailable states also follow the profile language. Raw names, versions and network evidence are preserved.
 
 Unloading the integration disables its server audit command and removes its own YAML fallback module. Pending replies are discarded if the integration is unloaded or administrator permissions are lost. Foreign dashboard resources and modules are preserved.

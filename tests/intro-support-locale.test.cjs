@@ -83,12 +83,13 @@ test('locale changes retain visible completed findings and the focused tab witho
     tab.click(); tab.focus();
     const content = root.getElementById('content');
     assert.ok(content.textContent.trim().length > 0);
-    const before = content.textContent;
+    const before = f.card._auditData;
     const reads = f.requests.length;
     for (const language of ['pl-PL', 'en']) {
       f.card.hass = { ...f.hass, language };
       assert.equal(root.getElementById('content'), content, 'locale must keep the visible result node');
-      assert.equal(content.textContent, before, 'completed findings stay visible');
+      assert.equal(f.card._auditData, before, 'cached audit evidence remains unchanged');
+      assert.match(content.textContent, language === 'en' ? /Supervisor API unavailable/ : /Supervisor API niedostępne/, 'visible findings follow the current locale');
       assert.equal(root.activeElement, tab, 'keyboard focus remains on the same tab');
     }
     assert.equal(f.requests.length, reads);

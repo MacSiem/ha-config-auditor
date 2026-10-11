@@ -1,4 +1,4 @@
-/* HA Tools split — ha-config-auditor v6.0.1 (2026-09-24) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v6.0.2 (2026-09-24) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -511,7 +511,7 @@ const _LOCAL_INTRO = {
 };
 const _LOCAL_INTRO_PL = {
   headline: 'Przegląd konfiguracji i wskazówki dotyczące dobrych praktyk.',
-  steps: ['Przegląd pokazuje liczbę pozytywnych wyników, ostrzeżeń i problemów.', 'W zakładce Findings przeczytaj każdy wynik i wskazówkę jego poprawy.', 'Zakładka Tips zawiera listę dobrych praktyk.']
+  steps: ['Przegląd pokazuje liczbę pozytywnych wyników, ostrzeżeń i problemów.', 'W zakładce Wyniki przeczytaj każdy wynik i wskazówkę jego poprawy.', 'Zakładka Wskazówki zawiera listę dobrych praktyk.']
 };
 const _LOCAL_SUPPORT_KEY = 'ha-config-auditor-support-dismissed';
 const _LOCAL_DONATE_HTML = '<div class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">Optional support for HA Tools</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;padding:2px 6px;min-height:0;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></div>';
@@ -546,6 +546,333 @@ function _bindLocalIntroDismiss(root) {
   });
 }
 /* ============================================================ */
+
+
+// Render-time copy: {n} placeholders retain measured values and server evidence.
+const AUDIT_COPY_PL = {
+  "Overview": "Przegląd",
+  "Findings": "Wyniki",
+  "Addons & Integrations": "Dodatki i integracje",
+  "Network": "Sieć",
+  "Users": "Użytkownicy",
+  "Tips": "Wskazówki",
+  "Running configuration best-practices audit...": "Trwa audyt dobrych praktyk konfiguracji...",
+  "Audit failed": "Audyt nie powiódł się",
+  "Configuration best-practice summary": "Podsumowanie dobrych praktyk konfiguracji",
+  "{0} checks run. Review failed and warning items first, then informational findings.": "Liczba wykonanych kontroli: {0}. Najpierw przejrzyj niezaliczone kontrole i ostrzeżenia, potem informacje.",
+  "Failed": "Niezaliczone",
+  "Warnings": "Ostrzeżenia",
+  "Warning": "Ostrzeżenie",
+  "Passed": "Zaliczone",
+  "Pass": "Zaliczone",
+  "Info": "Informacje",
+  "Informational": "Informacje",
+  "Failed Checks": "Niezaliczone kontrole",
+  "Addons installed": "Zainstalowane dodatki",
+  "Addons unavailable": "Dodatki niedostępne",
+  "Integrations": "Integracje",
+  "{0} entries": "Wpisy: {0}",
+  "Integrations unavailable": "Integracje niedostępne",
+  "User accounts": "Konta użytkowników",
+  "User accounts unavailable": "Konta użytkowników niedostępne",
+  "Entities": "Encje",
+  "Checks run": "Wykonane kontrole",
+  "Last scan: {0}": "Ostatni audyt: {0}",
+  "No findings": "Brak wyników",
+  "Server-verified": "Zweryfikowano na serwerze",
+  "Checked by the Config Auditor integration on the Home Assistant server": "Sprawdzone przez integrację Config Auditor na serwerze Home Assistant",
+  "Add-on inventory is unavailable; installed count was not measured.": "Lista dodatków jest niedostępna; nie zmierzono liczby zainstalowanych dodatków.",
+  "No addons installed": "Brak zainstalowanych dodatków",
+  "User accounts are unavailable; check account permissions or retry as an administrator.": "Konta użytkowników są niedostępne; sprawdź uprawnienia lub ponów próbę jako administrator.",
+  "No user accounts found": "Nie znaleziono kont użytkowników",
+  "Integration inventory is unavailable; configured count was not measured. Check permissions or use Refresh to retry.": "Lista integracji jest niedostępna; nie zmierzono ich liczby. Sprawdź uprawnienia lub użyj przycisku Odśwież.",
+  "No integrations configured": "Brak skonfigurowanych integracji",
+  "No network-related findings": "Brak wyników dotyczących sieci",
+  "No addons exposing ports": "Brak dodatków udostępniających porty",
+  "Add-on port inventory is unavailable; exposure was not measured.": "Lista portów dodatków jest niedostępna; nie zmierzono ich dostępności.",
+  "Addon": "Dodatek",
+  "Version": "Wersja",
+  "State": "Stan",
+  "Protection": "Ochrona",
+  "Auto-update": "Automatyczne aktualizacje",
+  "Host Network": "Sieć hosta",
+  "User": "Użytkownik",
+  "Role": "Rola",
+  "Active": "Aktywny",
+  "Local Only": "Tylko lokalnie",
+  "System": "Systemowy",
+  "Integration": "Integracja",
+  "Domain": "Domena",
+  "Config-flow source": "Źródło konfiguracji",
+  "Status": "Status",
+  "Remote Access": "Dostęp zdalny",
+  "Nabu Casa Cloud component loaded": "Komponent Nabu Casa Cloud jest załadowany",
+  "Not checked": "Nie sprawdzono",
+  "The cloud component is loaded. Subscription, active remote tunnel, reachability and TLS were not checked.": "Komponent chmury jest załadowany. Nie sprawdzono subskrypcji, aktywnego tunelu, dostępności ani TLS.",
+  "Cloud component not loaded": "Komponent chmury nie jest załadowany",
+  "The cloud component is not loaded. Configuration and remote access status were not checked.": "Komponent chmury nie jest załadowany. Nie sprawdzono konfiguracji ani stanu dostępu zdalnego.",
+  "External & Internal URLs": "Zewnętrzny i wewnętrzny URL",
+  "External URL configured for HTTPS": "Zewnętrzny URL skonfigurowany dla HTTPS",
+  "External URL configured for HTTP": "Zewnętrzny URL skonfigurowany dla HTTP",
+  "Not tested": "Nie przetestowano",
+  "Review configuration": "Sprawdź konfigurację",
+  "No External URL": "Brak zewnętrznego URL",
+  "Internal URL": "Wewnętrzny URL",
+  "{0}. Remote endpoint, reachability and certificate were not tested.": "{0}. Nie przetestowano zdalnego punktu dostępu, dostępności ani certyfikatu.",
+  "{0}. Endpoint and certificate were not tested.": "{0}. Nie przetestowano punktu dostępu ani certyfikatu.",
+  "Network Info": "Informacje o sieci",
+  "Location name": "Nazwa lokalizacji",
+  "HA Version": "Wersja HA",
+  "Hostname": "Nazwa hosta",
+  "OS": "System operacyjny",
+  "Time zone": "Strefa czasowa",
+  "Network Interfaces": "Interfejsy sieciowe",
+  "Exposed Addon Ports": "Udostępniane porty dodatków",
+  "Ports": "Porty",
+  "Network-Related Findings": "Wyniki dotyczące sieci",
+  "Reported flow source: {0}": "Znane źródło konfiguracji: {0}",
+  "Flow source unavailable: {0}": "Nieznane źródło konfiguracji: {0}",
+  "Errors: {0}": "Błędy: {0}",
+  "Integrations ({0})": "Integracje ({0})",
+  "Authentication": "Uwierzytelnianie",
+  "Enable multi-factor authentication (TOTP) for all user accounts, especially owner accounts. Go to Profile → Multi-factor Authentication.": "Włącz uwierzytelnianie wieloskładnikowe (TOTP) dla wszystkich kont, szczególnie właścicieli. Przejdź do Profil → Uwierzytelnianie wieloskładnikowe.",
+  "Network Security": "Bezpieczeństwo sieci",
+  "Never expose your HA instance directly to the internet. Use Cloudflare Tunnel, Nabu Casa, or a reverse proxy with SSL. Keep port 8123 behind a firewall.": "Nie udostępniaj HA bezpośrednio w internecie. Użyj Cloudflare Tunnel, Nabu Casa lub odwrotnego proxy z SSL. Chroń port 8123 zaporą.",
+  "Updates": "Aktualizacje",
+  "Keep HA Core, Supervisor, OS, and all addons up to date. Security patches are regularly released. Enable auto-update for addons when possible.": "Aktualizuj HA Core, Supervisor, system i dodatki. Regularnie pojawiają się poprawki bezpieczeństwa. W miarę możliwości włącz automatyczne aktualizacje dodatków.",
+  "Backups": "Kopie zapasowe",
+  "Schedule regular automated backups and store them off-site (Google Drive, NAS, etc.). Test backup restoration periodically.": "Zaplanuj regularne automatyczne kopie i przechowuj je poza urządzeniem (Google Drive, NAS itp.). Okresowo sprawdzaj przywracanie kopii.",
+  "Audit Trail": "Historia zdarzeń",
+  "Review the Logbook regularly for unexpected activity. Monitor login attempts through the System Log. Consider setting up alerts for failed login attempts.": "Regularnie przeglądaj dziennik zdarzeń. Monitoruj próby logowania w dzienniku systemowym. Rozważ alerty o nieudanych logowaniach.",
+  "Addon Hygiene": "Utrzymanie dodatków",
+  "Remove unused addons. Keep protection mode enabled unless absolutely needed. Review addon permissions (host network, privileged mode) periodically.": "Usuń nieużywane dodatki. Pozostaw ochronę włączoną, chyba że jej wyłączenie jest konieczne. Okresowo sprawdzaj uprawnienia dodatków (sieć hosta, tryb uprzywilejowany).",
+  "IoT Network": "Sieć IoT",
+  "Isolate IoT devices on a separate VLAN/subnet. Use firewall rules to prevent IoT devices from reaching the internet directly. This limits the blast radius of compromised devices.": "Odizoluj urządzenia IoT w osobnej sieci VLAN lub podsieci. Regułami zapory ogranicz bezpośredni dostęp do internetu, aby zmniejszyć skutki przejęcia urządzenia.",
+  "Supervisor API unavailable": "Supervisor API niedostępne",
+  "System updates, add-ons and Supervisor network checks were not run. The installation type or account permissions may explain this.": "Nie sprawdzono aktualizacji systemu, dodatków ani sieci Supervisor. Powodem może być wariant instalacji albo brak uprawnień.",
+  "Check installation type and account permissions": "Sprawdź typ instalacji i uprawnienia konta",
+  "HA Core update available": "Dostępna aktualizacja HA Core",
+  "Current: {0} → Latest: {1}": "Bieżąca: {0} → Najnowsza: {1}",
+  "Update via Settings → System → Updates": "Zaktualizuj przez Ustawienia → System → Aktualizacje",
+  "HA Core is up to date": "HA Core jest aktualny",
+  "Version: {0}": "Wersja: {0}",
+  "HA Core update status not checked": "Nie sprawdzono aktualności HA Core",
+  "Current version: {0}; latest version unavailable": "Bieżąca wersja: {0}; najnowsza wersja niedostępna",
+  "Supervisor update available": "Dostępna aktualizacja Supervisor",
+  "Update the Supervisor from System settings": "Zaktualizuj Supervisor w ustawieniach systemu",
+  "Supervisor is up to date": "Supervisor jest aktualny",
+  "Supervisor update status not checked": "Nie sprawdzono aktualności Supervisor",
+  "Version comparison data is incomplete.": "Dane porównania wersji są niepełne.",
+  "OS update available": "Dostępna aktualizacja systemu",
+  "HA OS is up to date": "HA OS jest aktualny",
+  "{0} addon(s) have updates": "Dostępne aktualizacje dodatków: {0}",
+  "Update addons via Settings → Add-ons": "Zaktualizuj dodatki przez Ustawienia → Dodatki",
+  "All addons up to date": "Wszystkie dodatki są aktualne",
+  "{0} addon(s) installed": "Zainstalowane dodatki: {0}",
+  "{0} addon(s) use host networking": "Dodatki korzystające z sieci hosta: {0}",
+  "Verify these addons require host network access": "Sprawdź, czy te dodatki wymagają dostępu do sieci hosta",
+  "{0} addon(s) with protection disabled": "Dodatki z wyłączoną ochroną: {0}",
+  "Enable protection mode in addon settings unless you specifically need it disabled": "Włącz ochronę w ustawieniach dodatku, chyba że jej wyłączenie jest konieczne",
+  "{0} addon(s) without auto-update": "Dodatki bez automatycznych aktualizacji: {0}",
+  "Consider enabling auto-update for non-critical addons": "Rozważ automatyczne aktualizacje mniej istotnych dodatków",
+  "External URL is configured for HTTPS": "Zewnętrzny URL skonfigurowany dla HTTPS",
+  "Configured URL: {0}. The remote endpoint and certificate were not tested.": "Skonfigurowany URL: {0}. Nie przetestowano zdalnego punktu dostępu ani certyfikatu.",
+  "External URL is configured for HTTP": "Zewnętrzny URL skonfigurowany dla HTTP",
+  "Configured URL: {0}. Remote reachability was not tested.": "Skonfigurowany URL: {0}. Nie przetestowano zdalnej dostępności.",
+  "If this URL is reachable outside your trusted network, configure HTTPS.": "Jeżeli ten URL jest dostępny poza zaufaną siecią, skonfiguruj HTTPS.",
+  "No external URL configured": "Brak skonfigurowanego zewnętrznego URL",
+  "Remote reachability was not tested.": "Nie przetestowano zdalnej dostępności.",
+  "Review remote access separately if you use it.": "Jeżeli używasz dostępu zdalnego, sprawdź go osobno.",
+  "Internal URL is configured for HTTPS": "Wewnętrzny URL skonfigurowany dla HTTPS",
+  "Configured URL: {0}. The certificate was not tested.": "Skonfigurowany URL: {0}. Nie przetestowano certyfikatu.",
+  "Managed SSL provider domain detected": "Wykryto domenę zarządzanego dostawcy SSL",
+  "{0} is configured. Certificate status and renewal were not checked.": "Skonfigurowano {0}. Nie sprawdzono certyfikatu ani jego odnawiania.",
+  "Verify SSL certificate expiry": "Sprawdź termin ważności certyfikatu SSL",
+  "Hostname: {0} — ensure your cert is auto-renewed (Let''s Encrypt, Cloudflare, etc.)": "Host: {0} — sprawdź automatyczne odnawianie certyfikatu (Let's Encrypt, Cloudflare itp.)",
+  "Use certbot with auto-renewal or a Cloudflare tunnel for hassle-free SSL": "Użyj certbot z automatycznym odnawianiem lub tunelu Cloudflare",
+  "User accounts not checked": "Nie sprawdzono kont użytkowników",
+  "The user inventory is unavailable. Check account permissions or retry as an administrator.": "Lista kont jest niedostępna. Sprawdź uprawnienia lub ponów próbę jako administrator.",
+  "{0} active user(s)": "Aktywni użytkownicy: {0}",
+  "Total registered: {0}": "Łącznie zarejestrowanych: {0}",
+  "{0} owner accounts detected": "Wykryte konta właściciela: {0}",
+  "Limit owner accounts to minimize attack surface. Demote unnecessary owners to admin.": "Ogranicz liczbę właścicieli. Zmień zbędne konta właściciela na administratorów.",
+  "{0} user(s) restricted to local access": "Konta ograniczone do dostępu lokalnego: {0}",
+  "{0} shell command(s) configured": "Skonfigurowane polecenia powłoki: {0}",
+  "Ensure shell commands don't execute untrusted input": "Sprawdź, czy polecenia powłoki nie wykonują niezaufanych danych wejściowych",
+  "SSH addon is running": "Dodatek SSH działa",
+  "Ensure SSH uses key-based auth. Disable if not actively needed.": "Używaj uwierzytelniania SSH kluczem. Wyłącz dodatek, gdy nie jest potrzebny.",
+  "SSH addon installed but stopped": "Dodatek SSH jest zainstalowany, ale zatrzymany",
+  "MQTT broker is running": "Broker MQTT działa",
+  "Ensure MQTT has authentication enabled and is not exposed to the internet": "Włącz uwierzytelnianie MQTT i nie udostępniaj brokera w internecie",
+  "{0} automations, {1} scripts": "Automatyzacje: {0}, skrypty: {1}",
+  "Review automations periodically for unintended actions": "Okresowo sprawdzaj automatyzacje pod kątem niezamierzonych działań",
+  "Potentially risky network services": "Potencjalnie ryzykowne usługi sieciowe",
+  "Ensure file sharing services are properly secured and only accessible on local network": "Zabezpiecz usługi udostępniania plików i ogranicz ich dostępność do sieci lokalnej",
+  "{0} addon(s) expose host ports": "Dodatki udostępniające porty hosta: {0}",
+  "Verify each exposed port is necessary. Use Ingress when available to avoid port exposure.": "Sprawdź, czy każdy port jest konieczny. Użyj Ingress, jeżeli jest dostępny.",
+  "{0} long-lived access token(s) for the current account": "Tokeny dostępu długoterminowego bieżącego konta: {0}",
+  "Only the current account token types were counted. Other users were not checked; ordinary login sessions are excluded.": "Policzono tylko typy tokenów bieżącego konta. Nie sprawdzono innych użytkowników; zwykłe sesje logowania pominięto.",
+  "Review unused tokens in your Profile. Token values were not read or stored.": "Sprawdź nieużywane tokeny w Profilu. Nie odczytano ani nie zapisano ich wartości.",
+  "Long-lived access tokens not checked": "Nie sprawdzono tokenów dostępu długoterminowego",
+  "Current-account token metadata is unavailable or unsupported. Other users were not checked. Review tokens manually in your Profile.": "Metadane tokenów bieżącego konta są niedostępne lub nieobsługiwane. Nie sprawdzono innych użytkowników. Sprawdź tokeny ręcznie w Profilu.",
+  "{0} camera(s) detected with external access": "Kamery z dostępem zewnętrznym: {0}",
+  "Camera streams may be accessible via external URL": "Strumienie kamer mogą być dostępne przez zewnętrzny URL",
+  "Ensure camera streams are not publicly accessible. Use Frigate Privacy or VPN for remote access.": "Nie udostępniaj strumieni kamer publicznie. Użyj Frigate Privacy lub VPN do dostępu zdalnego.",
+  "{0} webhook-related entit(ies)": "Encje powiązane z webhookami: {0}",
+  "Webhooks provide URL-based access to HA actions": "Webhooki umożliwiają uruchamianie działań HA przez URL",
+  "Ensure webhook URLs are kept secret and rotated periodically": "Chroń adresy webhooków i okresowo je zmieniaj",
+  "{0} custom HACS repository(ies) installed": "Zainstalowane własne repozytoria HACS: {0}",
+  "Review custom repositories for trust and source quality": "Sprawdź zaufanie i jakość źródeł własnych repozytoriów",
+  "Server-side checks are not available": "Kontrole serwerowe są niedostępne",
+  "Login providers, administrator two-factor authentication, IP banning, trusted proxies and plain-text secrets in YAML can only be verified by the Config Auditor integration. They are not reported as passed.": "Dostawców logowania, uwierzytelnianie dwuskładnikowe administratorów, blokowanie IP, zaufane proxy i jawne sekrety YAML może sprawdzić tylko integracja Config Auditor. Nie oznaczono tych kontroli jako zaliczonych.",
+  "Install the Config Auditor integration (see the README), then add it in Settings → Devices & services (administrator account required).": "Zainstaluj integrację Config Auditor (patrz README), następnie dodaj ją przez Ustawienia → Urządzenia i usługi (wymagane konto administratora).",
+  "{0} addon(s) with privileged access": "Dodatki z dostępem uprzywilejowanym: {0}",
+  "Privileged addons have root-level access. Verify they are trustworthy and necessary.": "Dodatki uprzywilejowane mają dostęp root. Sprawdź, czy są zaufane i konieczne.",
+  "{0} addon(s) expose port(s)": "Dodatki udostępniające porty: {0}",
+  "Ensure exposed ports are not accessible from the internet. Use firewall rules if needed.": "Nie udostępniaj portów w internecie. W razie potrzeby dodaj reguły zapory.",
+  "{0} addon(s) not using Ingress": "Dodatki nieużywające Ingress: {0}",
+  "Consider using Ingress for safer addon access (only through HA UI)": "Rozważ Ingress dla bezpieczniejszego dostępu do dodatków przez interfejs HA",
+  "{0} automation(s)/script(s) with webhook(s)": "Automatyzacje lub skrypty z webhookami: {0}",
+  "Webhooks expose endpoints that can be triggered from the internet": "Webhooki udostępniają punkty dostępu, które można wywołać z internetu",
+  "Ensure webhook URLs are not shared publicly. Use strong secrets in webhook URLs.": "Nie udostępniaj publicznie adresów webhooków. Używaj silnych sekretów w ich adresach.",
+  "{0} camera(s) configured": "Skonfigurowane kamery: {0}",
+  "Camera streams should not be exposed directly to the internet": "Nie udostępniaj strumieni kamer bezpośrednio w internecie",
+  "Use Secure (SSL/TLS) connection. Do not expose camera ports directly. Use Nabu Casa or tunnel.": "Używaj SSL/TLS. Nie udostępniaj portów kamer bezpośrednio. Użyj Nabu Casa lub tunelu.",
+  "{0} media player(s) configured": "Skonfigurowane odtwarzacze multimediów: {0}",
+  "Ensure media sources are not serving public content": "Sprawdź, czy źródła multimediów nie udostępniają treści publicznie",
+  "Use local media libraries. Do not expose media over the internet unless necessary.": "Używaj lokalnych bibliotek. Nie udostępniaj multimediów w internecie bez potrzeby.",
+  "Recorder keeping data for {0} days": "Recorder przechowuje dane przez {0} dni",
+  "Long retention can be a privacy concern if you have guests or visitors": "Długie przechowywanie danych może naruszać prywatność gości",
+  "Consider reducing purge_keep_days in configuration.yaml if privacy is a concern": "Rozważ zmniejszenie purge_keep_days w configuration.yaml dla ochrony prywatności",
+  "Supervisor debug mode is enabled": "Tryb debugowania Supervisor jest włączony",
+  "Debug mode exposes additional logs and should not stay enabled outside troubleshooting": "Debugowanie udostępnia dodatkowe logi i powinno działać tylko podczas diagnozowania",
+  "Disable debug mode in Supervisor settings unless troubleshooting": "Wyłącz debugowanie w ustawieniach Supervisor po zakończeniu diagnozowania",
+  "Supervisor debug block is enabled": "Blokada debugowania Supervisor jest włączona",
+  "This is a development/testing feature": "To funkcja programistyczna i testowa",
+  "Ensure this is intentional and not left enabled in production": "Sprawdź, czy to zamierzone i czy nie pozostało włączone w produkcji",
+  "HACS addon has an update available": "Dostępna aktualizacja dodatku HACS",
+  "Update HACS addon from Settings → Add-ons": "Zaktualizuj HACS przez Ustawienia → Dodatki",
+  "HACS addon is up to date": "Dodatek HACS jest aktualny",
+  "{0} addon(s) with Bluetooth/USB access": "Dodatki z dostępem Bluetooth/USB: {0}",
+  "Verify that these addons are trustworthy. USB/Bluetooth access provides direct hardware access.": "Sprawdź zaufanie do tych dodatków. USB/Bluetooth zapewnia bezpośredni dostęp do sprzętu.",
+  "Host hardware type": "Typ sprzętu hosta",
+  "Supervisor reports chassis: {0}. This does not establish installation type or network isolation.": "Supervisor zgłasza typ obudowy: {0}. Nie określa to rodzaju instalacji ani izolacji sieciowej.",
+  "{0} backup(s) without encryption": "Kopie zapasowe bez szyfrowania: {0}",
+  "Unencrypted backups expose sensitive data": "Nieszyfrowane kopie ujawniają dane wrażliwe",
+  "Create new backups with a password. Set a backup password in Settings → System → Backups": "Twórz kopie z hasłem. Ustaw hasło przez Ustawienia → System → Kopie zapasowe",
+  "MQTT allows anonymous connections": "MQTT pozwala na anonimowe połączenia",
+  "Anyone on the network can connect to your MQTT broker without authentication": "Każdy w sieci może połączyć się z brokerem MQTT bez uwierzytelniania",
+  "Disable anonymous access in Mosquitto addon configuration and set up proper user credentials": "Wyłącz anonimowy dostęp w Mosquitto i ustaw dane uwierzytelniające użytkowników",
+  "MQTT requires authentication": "MQTT wymaga uwierzytelniania",
+  "Anonymous connections are disabled": "Anonimowe połączenia są wyłączone",
+  "MQTT anonymous access not checked": "Nie sprawdzono anonimowego dostępu MQTT",
+  "The add-on response did not include an explicit anonymous setting.": "Odpowiedź dodatku nie zawierała jawnego ustawienia dostępu anonimowego.",
+  "Could not verify MQTT configuration": "Nie udało się sprawdzić konfiguracji MQTT",
+  "Unable to read Mosquitto addon settings": "Nie można odczytać ustawień Mosquitto",
+  "Manually verify MQTT authentication settings": "Sprawdź ręcznie ustawienia uwierzytelniania MQTT",
+  "{0} template/command_line entities": "Encje template/command_line: {0}",
+  "Large number of template entities may indicate complex configs that need review": "Wiele encji szablonowych może oznaczać złożoną konfigurację wymagającą przeglądu",
+  "Periodically review template sensors for unintended access or command execution paths": "Okresowo sprawdzaj szablony pod kątem niezamierzonego dostępu lub wykonywania poleceń",
+  "CORS or external URL allowlist configured": "Skonfigurowano CORS lub listę dozwolonych zewnętrznych URL",
+  "Cross-origin requests or external URLs are permitted": "Dozwolono żądania z innych źródeł lub zewnętrzne URL",
+  "Review allowed origins and URLs to ensure they are trusted": "Sprawdź zaufanie do dozwolonych źródeł i URL",
+  "External URL includes port 8123": "Zewnętrzny URL zawiera port 8123",
+  "Configured external URL: {0}. Internet reachability was not tested.": "Skonfigurowany zewnętrzny URL: {0}. Nie sprawdzono dostępności z internetu.",
+  "Review firewall and reverse proxy configuration if remote access is intended.": "Jeżeli zamierzasz używać dostępu zdalnego, sprawdź zaporę i odwrotne proxy.",
+  "{0} person(s) tracked": "Śledzone osoby: {0}",
+  "Location data is sensitive PII": "Dane lokalizacyjne są wrażliwymi danymi osobowymi",
+  "Ensure only trusted users have access to person entities. Review recorder include/exclude.": "Ogranicz dostęp do encji osób do zaufanych użytkowników. Sprawdź include/exclude w recorder.",
+  "Login providers could not be assessed": "Nie udało się ocenić dostawców logowania",
+  "No active provider was visible when this audit ran.": "Podczas audytu nie był widoczny żaden aktywny dostawca logowania.",
+  "Legacy API password login is enabled": "Logowanie wspólnym hasłem API jest włączone",
+  "The legacy_api_password auth provider lets anyone who knows one shared password log in.": "Dostawca legacy_api_password pozwala zalogować się każdemu znającemu wspólne hasło.",
+  "Remove the legacy_api_password provider from homeassistant: auth_providers and use user accounts with long-lived tokens.": "Usuń legacy_api_password z homeassistant: auth_providers i używaj kont z tokenami długoterminowymi.",
+  "Trusted networks login is enabled": "Logowanie z zaufanych sieci jest włączone",
+  "Trusted networks login is enabled with login bypass": "Logowanie z zaufanych sieci z pominięciem ekranu logowania jest włączone",
+  "Devices in these networks can log in without a password.": "Urządzenia w tych sieciach mogą logować się bez hasła.",
+  "Devices in these networks can log in without a password and skip the login screen.": "Urządzenia w tych sieciach mogą logować się bez hasła i pomijać ekran logowania.",
+  "Limit trusted_networks to single, fixed addresses (for example a wall tablet) and avoid allow_bypass_login.": "Ogranicz trusted_networks do pojedynczych stałych adresów (np. tabletu ściennego) i unikaj allow_bypass_login.",
+  "No legacy API password or trusted-network login provider detected": "Nie wykryto logowania wspólnym hasłem API ani przez zaufane sieci",
+  "Enabled auth providers: {0}.": "Włączeni dostawcy logowania: {0}.",
+  "No administrator can log in from outside the local network": "Żaden administrator nie może logować się spoza sieci lokalnej",
+  "All active administrators are restricted to local access.": "Wszyscy aktywni administratorzy mają wyłącznie dostęp lokalny.",
+  "{0} administrator(s) without two-factor authentication": "Administratorzy bez uwierzytelniania dwuskładnikowego: {0}",
+  "Administrators without MFA: {0}.": "Administratorzy bez MFA: {0}.",
+  "Each administrator can enable two-factor authentication in their profile (Security → Multi-factor authentication modules).": "Każdy administrator może włączyć uwierzytelnianie dwuskładnikowe w profilu (Bezpieczeństwo → Moduły uwierzytelniania wieloskładnikowego).",
+  "All administrators use two-factor authentication": "Wszyscy administratorzy używają uwierzytelniania dwuskładnikowego",
+  "{0} administrator(s) have an MFA module enabled.": "Administratorzy z włączonym modułem MFA: {0}.",
+  "Home Assistant serves HTTPS": "Home Assistant udostępnia HTTPS",
+  "The built-in web server uses a TLS certificate.": "Wbudowany serwer WWW używa certyfikatu TLS.",
+  "The configured external URL uses HTTPS; this check did not test the proxy or certificate from outside the network.": "Zewnętrzny URL używa HTTPS; ta kontrola nie testowała proxy ani certyfikatu spoza sieci.",
+  "Remote access uses Home Assistant Cloud (HTTPS)": "Dostęp zdalny używa Home Assistant Cloud (HTTPS)",
+  "Remote access goes through the encrypted Home Assistant Cloud connection; the local network uses plain HTTP.": "Dostęp zdalny korzysta z szyfrowanego połączenia Home Assistant Cloud; sieć lokalna używa zwykłego HTTP.",
+  "External URL uses plain HTTP": "Zewnętrzny URL używa nieszyfrowanego HTTP",
+  "Logins and tokens sent to the external URL are not encrypted.": "Logowania i tokeny wysyłane do zewnętrznego URL nie są szyfrowane.",
+  "Put Home Assistant behind HTTPS (reverse proxy, Home Assistant Cloud or a certificate) and update the external URL.": "Skonfiguruj HTTPS (odwrotne proxy, Home Assistant Cloud lub certyfikat) i zaktualizuj zewnętrzny URL.",
+  "Home Assistant is served over plain HTTP on the local network": "Home Assistant używa nieszyfrowanego HTTP w sieci lokalnej",
+  "No external HTTPS URL is configured. This is fine for local-only use.": "Nie skonfigurowano zewnętrznego URL HTTPS. To wystarcza do dostępu wyłącznie lokalnego.",
+  "If you open Home Assistant to the internet, use HTTPS.": "Jeżeli udostępniasz Home Assistant w internecie, używaj HTTPS.",
+  "Trusted proxies could not be read": "Nie udało się odczytać zaufanych proxy",
+  "The HTTP server is not available yet.": "Serwer HTTP nie jest jeszcze dostępny.",
+  "No reverse proxy is trusted": "Żadne odwrotne proxy nie jest zaufane",
+  "X-Forwarded-For headers are not trusted from any address.": "Nagłówki X-Forwarded-For nie są zaufane z żadnego adresu.",
+  "Every address is trusted as a proxy": "Każdy adres jest traktowany jako zaufane proxy",
+  "trusted_proxies contains {0}, so any client can fake its IP address and bypass IP bans.": "trusted_proxies zawiera {0}, więc każdy klient może podszyć się pod inny adres IP i ominąć blokady.",
+  "List only the address of your reverse proxy in trusted_proxies.": "W trusted_proxies wpisz tylko adres własnego odwrotnego proxy.",
+  "Large public networks are trusted as proxies": "Duże publiczne sieci są traktowane jako zaufane proxy",
+  "trusted_proxies includes {0}.": "trusted_proxies zawiera {0}.",
+  "Narrow trusted_proxies to the exact proxy addresses.": "Ogranicz trusted_proxies do dokładnych adresów proxy.",
+  "Trusted proxies are limited to bounded networks or addresses": "Zaufane proxy są ograniczone do wskazanych sieci lub adresów",
+  "Trusted proxies: {0}.": "Zaufane proxy: {0}.",
+  "IP ban settings could not be read": "Nie udało się odczytać ustawień blokowania IP",
+  "Failed logins lead to an IP ban": "Nieudane logowania powodują blokadę IP",
+  "An address is banned after {0} failed login attempt(s). Banned addresses: {1}.": "Adres jest blokowany po {0} nieudanych próbach logowania. Zablokowane adresy: {1}.",
+  "Failed logins do not lead to an IP ban": "Nieudane logowania nie powodują blokady IP",
+  "ip_ban_enabled is off or login_attempts_threshold is not set, so password guessing is not throttled.": "ip_ban_enabled jest wyłączone lub nie ustawiono login_attempts_threshold, więc próby odgadywania hasła nie są ograniczane.",
+  "Set ip_ban_enabled: true and login_attempts_threshold (for example 5) in the http: section.": "W sekcji http: ustaw ip_ban_enabled: true i login_attempts_threshold (np. 5).",
+  "{0} secret-looking value(s) written directly in YAML": "Wartości przypominające sekrety zapisane bezpośrednio w YAML: {0}",
+  "Found in {0}. Values are not shown.": "Znaleziono w {0}. Wartości nie są wyświetlane.",
+  "Found in {0}. Values are not shown. Scan incomplete; more findings may exist.": "Znaleziono w {0}. Wartości nie są wyświetlane. Skan jest niepełny; mogą istnieć kolejne wyniki.",
+  "Move each value to secrets.yaml and reference it with !secret.": "Przenieś wartości do secrets.yaml i odwołuj się do nich przez !secret.",
+  "YAML secret scan incomplete": "Skan sekretów YAML jest niepełny",
+  "Scan incomplete: {0} file(s) checked, {1} skipped, limit reached: {2}.": "Skan niepełny: sprawdzone pliki: {0}, pominięte: {1}, osiągnięto limit: {2}.",
+  "Check unreadable or oversized YAML files and rerun the audit.": "Sprawdź nieczytelne lub zbyt duże pliki YAML i ponów audyt.",
+  "No match in the heuristic YAML secret scan": "Brak dopasowań w heurystycznym skanie sekretów YAML",
+  "Scanned {0} YAML file(s) in the bounded configuration scope; no matching key/value line found. This does not prove all secrets use !secret.": "Przeskanowano {0} plików YAML w ograniczonym zakresie konfiguracji; brak dopasowania klucza i wartości. To nie dowodzi, że wszystkie sekrety używają !secret.",
+  "Check could not run": "Nie udało się wykonać kontroli",
+  "{0}; check did not complete.": "{0}; kontrola nie została ukończona.",
+  "{0} (not checked)": "{0} (nie sprawdzono)",
+  "N/A": "Brak danych",
+  "Not configured": "Nie skonfigurowano",
+  "N/A \u2014 no internal URL configured": "Brak danych — nie skonfigurowano wewnętrznego URL",
+  "Owner": "Właściciel",
+  "Admin": "Administrator",
+  "Inactive": "Nieaktywny",
+  "Unnamed": "Bez nazwy",
+  "On": "Włączone",
+  "Off": "Wyłączone",
+  "Yes": "Tak",
+  "No": "Nie",
+  "Enabled": "Włączony",
+  "Disabled": "Wyłączony",
+  "Connected": "Połączony",
+  "Disconnected": "Rozłączony",
+  "Link status": "Stan połączenia",
+  "Gateway": "Brama",
+  "Method": "Metoda",
+  "Signal": "Sygnał",
+  "started": "Uruchomiony",
+  "stopped": "Zatrzymany",
+  "loaded": "Załadowana",
+  "setup_error": "Błąd konfiguracji",
+  "not_loaded": "Niezaładowana",
+  "unknown": "Nieznany"
+};
+const AUDIT_COPY_PATTERNS = Object.entries(AUDIT_COPY_PL).filter(([key]) => key.includes("{0}")).map(([key, value]) => {
+  const parts = key.split(/\{\d+\}/);
+  const pattern = parts.map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("([\\s\\S]*?)");
+  return [new RegExp("^" + pattern + "$"), value];
+});
 
 class HAConfigAuditor extends HTMLElement {
   static getConfigElement() { return document.createElement('ha-config-auditor-editor'); }
@@ -677,7 +1004,34 @@ class HAConfigAuditor extends HTMLElement {
     return T[this._lang] || T.en;
   }
 
+  _msg(value) {
+    const text = String(value == null ? '' : value);
+    if (this._lang !== 'pl') return text;
+    if (Object.hasOwn(AUDIT_COPY_PL, text)) return AUDIT_COPY_PL[text];
+    for (const [pattern, translated] of AUDIT_COPY_PATTERNS) {
+      const match = text.match(pattern);
+      if (match) return translated.replace(/\{(\d+)\}/g, (_, index) => match[Number(index) + 1]);
+    }
+    return text;
+  }
+
+  _translateContent(content) {
+    if (this._lang !== 'pl') return;
+    // Data cells and authored/finding values are rendered separately, never translated as UI labels.
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      if (node.parentElement.closest('td, [data-audit-value]')) continue;
+      const match = node.textContent.match(/^(\s*(?:[\p{Extended_Pictographic}\uFE0F]\s*)*)(.*?)(\s*)$/u);
+      if (match) node.textContent = match[1] + this._msg(match[2]) + match[3];
+    }
+    for (const node of content.querySelectorAll('[title]')) node.title = this._msg(node.title);
+  }
+
   _updateLocale() {
+    const labels = { overview: 'Overview', critical: 'Findings', addons: 'Addons & Integrations', network: 'Network', users: 'Users', tips: 'Tips' };
+    this.shadowRoot.querySelectorAll('[role="tab"]').forEach(tab => { tab.textContent = this._msg(labels[tab.dataset.tab]); });
     const refresh = this.shadowRoot.querySelector('.audit-refresh');
     if (refresh) refresh.textContent = this._t.refresh;
     const intro = this._lang === 'pl' ? _LOCAL_INTRO_PL : _LOCAL_INTRO;
@@ -695,6 +1049,7 @@ class HAConfigAuditor extends HTMLElement {
       support.querySelector('a').textContent = this._lang === 'pl' ? 'Dobrowolne wsparcie HA Tools' : 'Optional support for HA Tools';
       support.querySelector('.support-dismiss').setAttribute('aria-label', this._lang === 'pl' ? 'Ukryj link wsparcia' : 'Dismiss support link');
     }
+    this._updateContent();
   }
 
   setConfig(config) {
@@ -761,8 +1116,7 @@ class HAConfigAuditor extends HTMLElement {
 
       // Detect non-supervised HA installation
       if (!hostInfo && !osInfo && !supervisorInfo && !coreInfo) {
-        const L = this._lang === 'pl';
-        findings.info.push({ id: 'no_supervisor', title: L ? 'Supervisor API niedostępne' : 'Supervisor API unavailable', desc: L ? 'Nie sprawdzono aktualizacji systemu, dodatków ani sieci Supervisor. Powodem może być wariant instalacji albo brak uprawnień.' : 'System updates, add-ons and Supervisor network checks were not run. The installation type or account permissions may explain this.', fix: L ? 'Sprawdź typ instalacji i uprawnienia konta' : 'Check installation type and account permissions' });
+        findings.info.push({ id: 'no_supervisor', title: 'Supervisor API unavailable', desc: 'System updates, add-ons and Supervisor network checks were not run. The installation type or account permissions may explain this.', fix: 'Check installation type and account permissions' });
       }
 
       if (coreInfo) {
@@ -977,6 +1331,7 @@ class HAConfigAuditor extends HTMLElement {
           bucket.push({
             id: 'server_' + sf.id,
             title: sf.status === 'skipped' ? `${sf.title} (not checked)` : sf.title,
+            skipped: sf.status === 'skipped',
             desc: sf.detail,
             fix: sf.fix || '',
             verified: sf.status !== 'skipped',
@@ -1889,12 +2244,12 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
             <button type="button" class="audit-refresh">${_esc(this._t.refresh)}</button>
           </div>
           <div class="tabs" role="tablist">
-            <button class="tab-button ${this._activeTab === 'overview' ? 'active' : ''}" data-tab="overview" role="tab" aria-selected="${this._activeTab === 'overview'}">Overview</button>
-            <button class="tab-button ${this._activeTab === 'critical' ? 'active' : ''}" data-tab="critical" role="tab" aria-selected="${this._activeTab === 'critical'}">Findings</button>
-            <button class="tab-button ${this._activeTab === 'addons' ? 'active' : ''}" data-tab="addons" role="tab" aria-selected="${this._activeTab === 'addons'}">Addons & Integrations</button>
-            <button class="tab-button ${this._activeTab === 'network' ? 'active' : ''}" data-tab="network" role="tab" aria-selected="${this._activeTab === 'network'}">Network</button>
-            <button class="tab-button ${this._activeTab === 'users' ? 'active' : ''}" data-tab="users" role="tab" aria-selected="${this._activeTab === 'users'}">Users</button>
-            <button class="tab-button ${this._activeTab === 'tips' ? 'active' : ''}" data-tab="tips" role="tab" aria-selected="${this._activeTab === 'tips'}">Tips</button>
+            <button class="tab-button ${this._activeTab === 'overview' ? 'active' : ''}" data-tab="overview" role="tab" aria-selected="${this._activeTab === 'overview'}">${_esc(this._msg('Overview'))}</button>
+            <button class="tab-button ${this._activeTab === 'critical' ? 'active' : ''}" data-tab="critical" role="tab" aria-selected="${this._activeTab === 'critical'}">${_esc(this._msg('Findings'))}</button>
+            <button class="tab-button ${this._activeTab === 'addons' ? 'active' : ''}" data-tab="addons" role="tab" aria-selected="${this._activeTab === 'addons'}">${_esc(this._msg('Addons & Integrations'))}</button>
+            <button class="tab-button ${this._activeTab === 'network' ? 'active' : ''}" data-tab="network" role="tab" aria-selected="${this._activeTab === 'network'}">${_esc(this._msg('Network'))}</button>
+            <button class="tab-button ${this._activeTab === 'users' ? 'active' : ''}" data-tab="users" role="tab" aria-selected="${this._activeTab === 'users'}">${_esc(this._msg('Users'))}</button>
+            <button class="tab-button ${this._activeTab === 'tips' ? 'active' : ''}" data-tab="tips" role="tab" aria-selected="${this._activeTab === 'tips'}">${_esc(this._msg('Tips'))}</button>
           </div>
           <div id="content"></div>
         
@@ -1936,8 +2291,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     if (!content) return;
     const refresh = this.shadowRoot.querySelector('.audit-refresh');
     if (refresh) { refresh.disabled = this._loading; refresh.textContent = this._t.refresh; }
-    if (this._loading) { content.innerHTML = '<div class="loading"><div class="spinner"></div>Running configuration best-practices audit...</div>'; return; }
-    if (!this._auditData || this._auditData.error) { content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._auditData?.error || 'Audit failed')}</div>`; return; }
+    if (this._loading) { content.innerHTML = `<div class="loading"><div class="spinner"></div>${_esc(this._msg('Running configuration best-practices audit...'))}</div>`; return; }
+    if (!this._auditData || this._auditData.error) { content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._msg('Audit failed'))}${this._auditData?.error ? ': ' + _esc(this._auditData.error) : ''}</div>`; return; }
     const d = this._auditData;
     switch (this._activeTab) {
       case 'overview': content.innerHTML = this._renderOverview(d); break;
@@ -1947,6 +2302,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       case 'users': content.innerHTML = this._renderUsers(d); break;
       case 'tips': content.innerHTML = this._renderTips(d); break;
     }
+    this._translateContent(content);
   }
 
   _renderOverview(d) {
@@ -1967,7 +2323,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.integrationsAvailable === true ? 'Integrations' : 'Integrations unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
     if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
     if (d.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
-    if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString()}</div>`; }
+    if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString(this._t.locale)}</div>`; }
     return html;
   }
 
@@ -1984,7 +2340,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   _renderFinding(f, severity) {
     const icons = { critical: '\u{1F6A8}', warning: '\u26A0\uFE0F', info: '\u2139\uFE0F', pass: '\u2705' };
     const labels = { critical: 'Failed', warning: 'Warning', info: 'Info', pass: 'Pass' };
-    return `<div class="finding ${severity}"><div class="finding-header"><span class="finding-icon">${icons[severity]}</span><span class="finding-title">${_esc(f.title)}</span><span class="finding-badge badge-${severity}">${labels[severity]}</span>${f.verified ? '<span class="finding-badge badge-verified" title="Checked by the Config Auditor integration on the Home Assistant server">Server-verified</span>' : ''}</div><div class="finding-desc">${_esc(f.desc)}</div>${f.fix ? `<div class="finding-fix">\u{1F4A1} ${_esc(f.fix)}</div>` : ''}</div>`;
+    return `<div class="finding ${severity}"><div class="finding-header"><span class="finding-icon">${icons[severity]}</span><span class="finding-title" data-audit-value>${_esc(this._msg(f.skipped ? f.title.replace(/ \(not checked\)$/, '') : f.title))}${f.skipped ? ' (' + this._msg('Not checked').toLowerCase() + ')' : ''}</span><span class="finding-badge badge-${severity}">${labels[severity]}</span>${f.verified ? '<span class="finding-badge badge-verified" title="Checked by the Config Auditor integration on the Home Assistant server">Server-verified</span>' : ''}</div><div class="finding-desc" data-audit-value>${_esc(this._msg(f.desc))}</div>${f.fix ? `<div class="finding-fix" data-audit-value>\u{1F4A1} ${_esc(this._msg(f.fix))}</div>` : ''}</div>`;
   }
 
   _renderAddonsAndIntegrations(d) {
@@ -2001,13 +2357,13 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     if (!d.addons.length) {
       return '<div class="empty-msg">No addons installed</div>';
     }
-    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(a.state || 'stopped')}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? 'N/A' : prot ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? 'N/A' : autoUp ? '\u2713 On' : '\u2717 Off'}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? 'N/A' : hostNet ? '\u26A0 Yes' : 'No'}</td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'stopped'))}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? this._msg('N/A') : prot ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? this._msg('N/A') : autoUp ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? this._msg('N/A') : hostNet ? '\u26A0 ' + this._msg('Yes') : this._msg('No')}</td></tr>`; }).join('')}</tbody></table></div>`;
   }
 
   _renderUsers(d) {
     if (d.usersAvailable !== true) return '<div class="empty-msg">User accounts are unavailable; check account permissions or retry as an administrator.</div>';
     if (!d.users.length) return '<div class="empty-msg">No user accounts found</div>';
-    return `<div class="table-container"><table class="entity-table"><thead><tr><th>User</th><th>Role</th><th>Active</th><th>Local Only</th><th>System</th></tr></thead><tbody>${d.users.map(u => `<tr><td>${this._sanitize(u.name || 'Unnamed')}</td><td>${u.is_owner ? '\u{1F451} Owner' : u.group_ids?.includes('system-admin') ? 'Admin' : 'User'}</td><td style="color:${u.is_active !== false ? '#4caf50' : '#9e9e9e'}">${u.is_active !== false ? '\u2713 Active' : 'Inactive'}</td><td>${u.local_only ? '\u2713 Yes' : 'No'}</td><td>${u.system_generated ? '\u{1F916} Yes' : 'No'}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table"><thead><tr><th>User</th><th>Role</th><th>Active</th><th>Local Only</th><th>System</th></tr></thead><tbody>${d.users.map(u => `<tr><td>${this._sanitize(u.name || this._msg('Unnamed'))}</td><td>${u.is_owner ? '\u{1F451} ' + this._msg('Owner') : u.group_ids?.includes('system-admin') ? this._msg('Admin') : this._msg('User')}</td><td style="color:${u.is_active !== false ? '#4caf50' : '#9e9e9e'}">${u.is_active !== false ? '\u2713 ' + this._msg('Active') : this._msg('Inactive')}</td><td>${u.local_only ? '\u2713 ' + this._msg('Yes') : this._msg('No')}</td><td>${u.system_generated ? '\u{1F916} ' + this._msg('Yes') : this._msg('No')}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   _renderNetwork(d) {
@@ -2035,25 +2391,25 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     } else {
       html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">No External URL</span></div>`;
     }
-    html += `<div class="finding-desc">${_esc(externalUrl || 'Not configured')}. Remote endpoint, reachability and certificate were not tested.</div></div>`;
+    html += `<div class="finding-desc">${_esc(externalUrl || this._msg('Not configured'))}. Remote endpoint, reachability and certificate were not tested.</div></div>`;
 
     html += '<div class="finding info">';
     html += `<div class="finding-header"><span class="finding-icon">\u2139\uFE0F</span><span class="finding-title">Internal URL</span></div>`;
-    html += `<div class="finding-desc">${_esc(internalUrl || 'N/A — no internal URL configured')}. Endpoint and certificate were not tested.</div></div>`;
+    html += `<div class="finding-desc">${_esc(internalUrl || this._msg('N/A — no internal URL configured'))}. Endpoint and certificate were not tested.</div></div>`;
 
     // Network info from hass.config
     const haConfig = this._hass.config || {};
     html += '<div class="section-title">\u{1F4F6} Network Info</div>';
     html += '<div class="finding info"><div class="finding-desc">';
     html += '<div style="display:grid;grid-template-columns:140px 1fr;gap:6px 12px;font-size:13px;">';
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Location name</span><span>${_esc(haConfig.location_name || 'N/A')}</span>`;
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">HA Version</span><span>${_esc(haConfig.version || 'N/A')}</span>`;
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Location name</span><span data-audit-value>${_esc(haConfig.location_name || this._msg('N/A'))}</span>`;
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">HA Version</span><span data-audit-value>${_esc(haConfig.version || this._msg('N/A'))}</span>`;
     const hi = d.hostInfo || {};
-    if (hi.hostname) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Hostname</span><span>${_esc(hi.hostname)}</span>`;
-    if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span>${_esc(hi.operating_system)}</span>`;
-    if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span>${_esc(hi.supervisor)}</span>`;
-    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span>${_esc(haConfig.time_zone || 'N/A')}</span>`;
-    const integrationCount = d.integrationsAvailable === true ? d.integrations.length + ' entries' : 'N/A';
+    if (hi.hostname) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Hostname</span><span data-audit-value>${_esc(hi.hostname)}</span>`;
+    if (hi.operating_system) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">OS</span><span data-audit-value>${_esc(hi.operating_system)}</span>`;
+    if (hi.supervisor) html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Supervisor</span><span data-audit-value>${_esc(hi.supervisor)}</span>`;
+    html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Time zone</span><span data-audit-value>${_esc(haConfig.time_zone || this._msg('N/A'))}</span>`;
+    const integrationCount = d.integrationsAvailable === true ? this._msg(d.integrations.length + ' entries') : this._msg('N/A');
     html += `<span style="font-weight:600;color:var(--bento-text-secondary)">Integrations</span><span>${integrationCount}</span>`;
     html += '</div></div></div>';
 
@@ -2064,31 +2420,31 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       ifaces.forEach(iface => {
         const name = iface.interface || iface.name || 'unknown';
         const type = iface.type || 'unknown';
-        const enabled = iface.enabled === true ? 'Enabled' : iface.enabled === false ? 'Disabled' : 'N/A';
+        const enabled = iface.enabled === true ? this._msg('Enabled') : iface.enabled === false ? this._msg('Disabled') : this._msg('N/A');
         const ipv4 = iface.ipv4 || {};
         const addresses = ipv4.address || [];
-        const gateway = ipv4.gateway || 'N/A';
-        const method = ipv4.method || 'N/A';
-        const dns = (iface.ipv4?.nameservers || []).join(', ') || 'N/A';
-        const mac = iface.mac || 'N/A';
+        const gateway = ipv4.gateway || this._msg('N/A');
+        const method = ipv4.method || this._msg('N/A');
+        const dns = (iface.ipv4?.nameservers || []).join(', ') || this._msg('N/A');
+        const mac = iface.mac || this._msg('N/A');
         const wifi = iface.wifi || null;
 
         html += '<div class="finding info" style="margin-bottom:8px">';
         html += '<div class="finding-header">';
         html += '<span class="finding-icon">' + (type === 'wireless' ? '\u{1F4F6}' : '\u{1F50C}') + '</span>';
-        html += '<span class="finding-title">' + _esc(name) + ' (' + _esc(type) + ')</span>';
+        html += '<span class="finding-title" data-audit-value>' + _esc(name) + ' (' + _esc(type) + ')</span>';
         html += '<span class="finding-badge badge-info">' + enabled + '</span>';
         html += '</div>';
         html += '<div class="finding-desc"><div style="display:grid;grid-template-columns:100px 1fr;gap:4px 12px;font-size:12px;">';
-        if (addresses.length > 0) html += '<span style="font-weight:600">IP</span><span>' + _esc(addresses.join(', ')) + '</span>';
-        html += '<span style="font-weight:600">Link status</span><span>' + (iface.connected === true ? 'Connected' : iface.connected === false ? 'Disconnected' : 'N/A') + '</span>';
-        html += '<span style="font-weight:600">Gateway</span><span>' + _esc(gateway) + '</span>';
-        html += '<span style="font-weight:600">DNS</span><span>' + _esc(dns) + '</span>';
-        html += '<span style="font-weight:600">MAC</span><span><code style="font-size:11px">' + _esc(mac) + '</code></span>';
-        html += '<span style="font-weight:600">Method</span><span>' + _esc(method) + '</span>';
+        if (addresses.length > 0) html += '<span style="font-weight:600">IP</span><span data-audit-value>' + _esc(addresses.join(', ')) + '</span>';
+        html += '<span style="font-weight:600">Link status</span><span>' + (iface.connected === true ? this._msg('Connected') : iface.connected === false ? this._msg('Disconnected') : this._msg('N/A')) + '</span>';
+        html += '<span style="font-weight:600">Gateway</span><span data-audit-value>' + _esc(gateway) + '</span>';
+        html += '<span style="font-weight:600">DNS</span><span data-audit-value>' + _esc(dns) + '</span>';
+        html += '<span style="font-weight:600">MAC</span><span data-audit-value><code style="font-size:11px">' + _esc(mac) + '</code></span>';
+        html += '<span style="font-weight:600">Method</span><span data-audit-value>' + _esc(method) + '</span>';
         if (wifi) {
-          html += '<span style="font-weight:600">SSID</span><span>' + _esc(wifi.ssid || 'N/A') + '</span>';
-          html += '<span style="font-weight:600">Signal</span><span>' + _esc(typeof wifi.signal === 'number' && Number.isFinite(wifi.signal) ? wifi.signal + '%' : 'N/A') + '</span>';
+          html += '<span style="font-weight:600">SSID</span><span data-audit-value>' + _esc(wifi.ssid || this._msg('N/A')) + '</span>';
+          html += '<span style="font-weight:600">Signal</span><span data-audit-value>' + _esc(typeof wifi.signal === 'number' && Number.isFinite(wifi.signal) ? wifi.signal + '%' : this._msg('N/A')) + '</span>';
         }
         html += '</div></div></div>';
       });
@@ -2103,9 +2459,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       html += '<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Ingress</th><th>Ports</th><th>State</th></tr></thead><tbody>';
       exposedAddons.forEach(a => {
         const hasIngress = a.ingress === true;
-        const ports = a.ports ? Object.entries(a.ports).map(([port, config]) => `${port}${config.host_port ? `→${config.host_port}` : ''}`).join(', ') : 'N/A';
+        const ports = a.ports ? Object.entries(a.ports).map(([port, config]) => `${port}${config.host_port ? `→${config.host_port}` : ''}`).join(', ') : this._msg('N/A');
         const color = hasIngress ? '#4caf50' : a.state === 'started' ? '#ff9800' : '#9e9e9e';
-        html += `<tr><td>${_esc(a.name)}</td><td style="color:${color}">${hasIngress ? '\u2713 Yes' : '\u2717 No'}</td><td><code style="font-size:12px;background:var(--bento-bg);padding:4px 8px;border-radius:4px">${_esc(ports)}</code></td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(a.state || 'stopped')}</td></tr>`;
+        html += `<tr><td>${_esc(a.name)}</td><td style="color:${color}">${hasIngress ? '\u2713 ' + this._msg('Yes') : '\u2717 ' + this._msg('No')}</td><td><code style="font-size:12px;background:var(--bento-bg);padding:4px 8px;border-radius:4px">${_esc(ports)}</code></td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'stopped'))}</td></tr>`;
       });
       html += '</tbody></table></div>';
     }
@@ -2148,10 +2504,10 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     html += `<div class="table-container"><table class="entity-table"><thead><tr><th>Integration</th><th>Domain</th><th>Config-flow source</th><th>Status</th></tr></thead><tbody>`;
     d.integrations.forEach(e => {
       const statusColor = e.state === 'loaded' ? '#4caf50' : e.state === 'setup_error' ? '#f44336' : e.state === 'not_loaded' ? '#ff9800' : '#9e9e9e';
-      const source = typeof e.source === 'string' && e.source.length > 0 ? e.source : 'N/A';
+      const source = typeof e.source === 'string' && e.source.length > 0 ? e.source : this._msg('N/A');
       html += `<tr><td>${_esc(e.title || e.domain)}</td><td style="font-family:monospace;font-size:12px">${_esc(e.domain)}</td>`;
       html += `<td><span class="finding-badge badge-info">${_esc(source)}</span></td>`;
-      html += `<td style="color:${statusColor};font-weight:600">\u25CF ${_esc(e.state || 'unknown')}</td></tr>`;
+      html += `<td style="color:${statusColor};font-weight:600">\u25CF ${_esc(this._msg(e.state || 'unknown'))}</td></tr>`;
     });
     html += '</tbody></table></div></div>';
     return html;
@@ -2232,7 +2588,7 @@ if (!customElements.get('ha-config-auditor')) {
 }
 
 console.info(
-  '%c  HA-CONFIG-AUDITOR  %c v6.0.1 ',
+  '%c  HA-CONFIG-AUDITOR  %c v6.0.2 ',
   'background: #f44336; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #ffebee; color: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
