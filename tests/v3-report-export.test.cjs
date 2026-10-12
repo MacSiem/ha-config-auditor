@@ -195,3 +195,18 @@ test('a changed or unconfirmed backend source cannot make old saved reports comp
  const f=await fixture('en',source);try{const c=f.card;f.dom.window.localStorage.setItem(c._reportsKey(),raw);c._loadManualReports();const old=c._savedReports[0];c._updateReportControls();c.shadowRoot.querySelector('.report-save').click();c._reportBaseline=old.id;assert.equal(c._selectedComparison().compatible,false);}finally{f.cleanup();}
  }
 });
+test('a confirmed different HA instance is distinguished from unavailable legacy source identity',async()=>{
+ const first=await fixture('en',stableSource);let raw;
+ try{first.card.shadowRoot.querySelector('.report-save').click();raw=first.dom.window.localStorage.getItem(first.card._reportsKey());}finally{first.cleanup();}
+ const f=await fixture('en',{...stableSource,instance:'c-'+'a'.repeat(32)});try{
+ const c=f.card;f.dom.window.localStorage.setItem(c._reportsKey(),raw);c._loadManualReports();const old=c._savedReports[0];c._updateReportControls();c.shadowRoot.querySelector('.report-save').click();c._reportBaseline=old.id;
+ assert.equal(c._selectedComparison().reason,'instance_changed');c._updateReportControls();assert.match(c.shadowRoot.querySelector('#report-tools').textContent,/different HA instance/);
+ }finally{f.cleanup();}
+});
+test('version metadata cannot carry addresses or arbitrary tokens in any exported format',()=>{
+ for(const value of ['192.168.1.42','6.0.2+CANARY-TOKEN','6.0.2-CANARY']){
+ const a=snap({...data(),serverVersion:value});
+ for(const format of ['json','csv','txt'])for(const includePrivate of [false,true])assert.doesNotMatch(reports.serialize(a,{format,includePrivate}),/192\.168\.1\.42|CANARY/);
+ }
+ assert.equal(snap({...data(),serverVersion:'6.1.0-beta.1'}).serverVersion,'6.1.0-beta.1');
+});
