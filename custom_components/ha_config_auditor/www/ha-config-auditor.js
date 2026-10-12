@@ -40,6 +40,458 @@ function createUiV3({ language = 'en' } = {}) {
 }
 // END HA TOOLS UI V3
 
+// BEGIN HA TOOLS EXPORT V3 source-sha256=1f9e9c5444ec3b6de44eec136f14ae9e7d89dae1002650b33f746ab9633982f1
+/**
+ * W6 export dialog. Pure ES module; vendor this factory INSIDE each consumer's
+ * own IIFE (remove only the `export` keyword). Never attach it to window.
+ * Construction is inert. open() appends only its own container to root.
+ *
+ * Required dependency injection:
+ * root: Element/ShadowRoot; getLanguage(): 'pl'|'en'; createUiV3: existing W4 factory.
+ * getContext(): {role,userId,connectionId,datasetId,revision,connected,canExport,
+ *                sourceConfirmed}. Identities/revision are nonempty scalar values;
+ * bump revision monotonically for source/filter/selection/identity changes,
+ * including a restored source; never reuse an old revision. Never return tokens or data.
+ * policy: {id,allowlistedFields:string[],neverInclude:[tokens,users,addresses,raw_config]}.
+ * formats: explicit subset of ['json','csv','txt']; defaults must be explicit valid choices.
+ * buildPayload({context,draft,policy,signal}): read-only, Promise or sync result:
+ * {serialized:string,confirmed:true,sourceConfirmed:true,status:'success'|'partial',
+ *  included:string[],excluded:string[],sourceLimit:string}.
+ * Included/Excluded/sourceLimit describe the REVIEWED CONSUMER policy and actual
+ * source limitations in the current language. The consumer MUST explicitly select
+ * allowed fields, exclude tokens/users/addresses/raw configuration under EVERY
+ * private opt-in, and sanitize CSV formula cells where applicable. A generic
+ * recursive export/redactor of arbitrary raw state/config is NOT a valid consumer.
+ * This factory cannot inspect or truthfully sanitize an unknown arbitrary schema.
+ * For partial reports the consumer also encodes the partial status, inclusion
+ * scope and source limitations IN its allowlisted file schema, not only UI text.
+ * performDownload({serialized,blob,filename,format,context,signal}): explicit Save
+ * only. Return {outcome:'initiated'|'saved'|'unknown'}; 'saved' requires actual
+ * adapter confirmation, never infer disk persistence from an anchor click.
+ * Optional clock(): monotonic milliseconds; setTimer(fn,ms), clearTimer(handle).
+ *
+ * Returned API: open({opener}), cancel(), contextChanged(), destroy(). Every open
+ * resets private consent. contextChanged() discards bytes/consent immediately;
+ * owner also calls cancel/destroy on disconnect. Save ALWAYS rechecks context.
+ * One preview on open, explicit Refresh thereafter; bounded 10s, no automatic
+ * retries/downloads/persistence. AbortSignal is advisory; late results are ignored.
+ */
+function createExportDialog(options) {
+  const { root, getContext, getLanguage, createUiV3, buildPayload, performDownload,
+    clock = () => globalThis.performance.now(), setTimer = (fn, ms) => globalThis.setTimeout(fn, ms),
+    clearTimer = id => globalThis.clearTimeout(id), defaultFormat, defaultFilename } = options || {};
+  const allowedFormats = ['json', 'csv', 'txt', 'yaml'];
+  const excludedCategories = ['tokens', 'users', 'addresses', 'raw_config'];
+  const strings = value => Array.isArray(value) && value.length > 0 && value.every(v => typeof v === 'string' && v.trim());
+  if (!root?.append || !root.ownerDocument || [getContext, getLanguage, createUiV3, buildPayload, performDownload, clock, setTimer, clearTimer].some(fn => typeof fn !== 'function')) {
+    throw new TypeError('root and injected getContext/getLanguage/createUiV3/buildPayload/performDownload/clock/timers are required');
+  }
+  const suppliedPolicy = options.policy;
+  if (!suppliedPolicy || typeof suppliedPolicy.id !== 'string' || !suppliedPolicy.id.trim() || !strings(suppliedPolicy.allowlistedFields) || !strings(suppliedPolicy.neverInclude) || excludedCategories.some(key => !suppliedPolicy.neverInclude.includes(key))) {
+    throw new TypeError('Explicit reviewed consumer policy with allowlistedFields and neverInclude is required');
+  }
+  const policy = Object.freeze({ id: suppliedPolicy.id, allowlistedFields: Object.freeze([...suppliedPolicy.allowlistedFields]), neverInclude: Object.freeze([...suppliedPolicy.neverInclude]) });
+  if (!strings(options.formats) || options.formats.some(f => !allowedFormats.includes(f)) || new Set(options.formats).size !== options.formats.length || !options.formats.includes(defaultFormat) || typeof defaultFilename !== 'string') {
+    throw new TypeError('Explicit formats/defaultFormat/defaultFilename are required');
+  }
+  const formats = Object.freeze([...options.formats]);
+  const doc = root.ownerDocument;
+  const mime = { json: 'application/json;charset=utf-8', csv: 'text/csv;charset=utf-8', txt: 'text/plain;charset=utf-8', yaml: 'application/yaml;charset=utf-8' };
+  const copy = {
+    en: { title: 'Export', filename: 'Filename', format: 'Format', private: 'Include reviewed private fields (this export only)', included: 'Included in the file', excluded: 'Excluded from the file', source: 'Source and limits', preview: 'Exact file content', save: 'Save', refresh: 'Refresh preview', cancel: 'Cancel', busy: 'Building preview… Save waits for confirmed bytes.', changed: 'Choices changed. Refresh preview before Save.', context: 'Source or access changed. Review the source and refresh preview.', unavailable: 'Source unavailable or unconfirmed. Reconnect or confirm the source, then refresh.', invalidFormat: 'Choose an allowed format: JSON, CSV, TXT or YAML as offered.', invalidName: 'Use a basename of 1–128 characters: no paths, control characters, reserved names or leading/trailing spaces.', extension: 'Filename must end with the selected extension. Edit the filename, then refresh.', timeout: 'Preview exceeded 10 seconds. Check the source and explicitly refresh.', buildError: 'Could not build a confirmed preview. Check the source and refresh.', unconfirmed: 'Bytes or source metadata are unconfirmed. Confirm the source and refresh.', noData: 'No confirmed file content. Select available data and refresh.', saving: 'Handing off the confirmed preview… Wait for the adapter result.', initiated: 'Download initiated. Saving to the filesystem is not confirmed. Refresh only for a new export intent.', saved: 'Save confirmed by the download adapter.', unknown: 'Download result unconfirmed. Check the previous attempt before explicitly refreshing for a new export intent.' },
+    pl: { title: 'Eksport', filename: 'Nazwa pliku', format: 'Format', private: 'Dołącz sprawdzone pola prywatne (tylko ten eksport)', included: 'W pliku jest', excluded: 'W pliku nie ma', source: 'Źródło i ograniczenia', preview: 'Dokładna zawartość pliku', save: 'Zapisz', refresh: 'Odśwież podgląd', cancel: 'Anuluj', busy: 'Przygotowywanie podglądu… Zapis wymaga potwierdzonej zawartości.', changed: 'Wybór zmieniony. Odśwież podgląd przed zapisem.', context: 'Źródło lub uprawnienia zmienione. Sprawdź źródło i odśwież podgląd.', unavailable: 'Źródło niedostępne lub niepotwierdzone. Połącz lub potwierdź źródło i odśwież.', invalidFormat: 'Wybierz dostępny format: JSON, CSV, TXT lub YAML z listy.', invalidName: 'Użyj nazwy pliku o długości 1–128 znaków: bez ścieżek, znaków sterujących, nazw zastrzeżonych i skrajnych spacji.', extension: 'Nazwa pliku musi mieć rozszerzenie wybranego formatu. Popraw nazwę i odśwież.', timeout: 'Podgląd przekroczył 10 sekund. Sprawdź źródło i jawnie odśwież.', buildError: 'Nie udało się przygotować potwierdzonego podglądu. Sprawdź źródło i odśwież.', unconfirmed: 'Zawartość lub opis źródła niepotwierdzony. Potwierdź źródło i odśwież.', noData: 'Brak potwierdzonej zawartości pliku. Wybierz dostępne dane i odśwież.', saving: 'Przekazywanie potwierdzonego podglądu… Poczekaj na wynik zapisu.', initiated: 'Pobieranie rozpoczęte. Zapis na dysku nie jest potwierdzony. Odśwież tylko dla nowej próby eksportu.', saved: 'Adapter pobierania potwierdził zapis.', unknown: 'Wynik pobierania niepotwierdzony. Sprawdź poprzednią próbę przed jawnym odświeżeniem dla nowego eksportu.' },
+  };
+  const css = `
+[data-ha-tools-export] { container-type:inline-size;min-width:0;max-width:100%;color:var(--primary-text-color,inherit);font:inherit; }
+[data-ha-tools-export] * { box-sizing:border-box; }
+[data-ha-tools-export] [role=dialog] { width:100%;min-width:0;border:1px solid var(--divider-color,#aaa);border-radius:12px;background:var(--card-background-color,#fff);padding:16px; }
+[data-ha-tools-export] h2,[data-ha-tools-export] h3,[data-ha-tools-export] p,[data-ha-tools-export] li { overflow-wrap:anywhere;white-space:normal; }
+[data-ha-tools-export] h2 { margin:0 0 12px;font-size:1.25em; }
+[data-ha-tools-export] h3 { margin:12px 0 6px;font-size:1em; }
+[data-ha-tools-export] .ht-export-fields { display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px; }
+[data-ha-tools-export] label { display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere; }
+[data-ha-tools-export] .ht-export-private { flex-direction:row;align-items:center;min-height:44px;margin-top:12px; }
+[data-ha-tools-export] input:not([type=checkbox]),[data-ha-tools-export] select,[data-ha-tools-export] button { font:inherit;min-width:44px;min-height:44px;max-width:100%; }
+[data-ha-tools-export] input:not([type=checkbox]),[data-ha-tools-export] select { width:100%;color:inherit;background:var(--secondary-background-color,var(--card-background-color,#f5f5f5));border:1px solid var(--divider-color,#aaa);border-radius:6px;padding:8px; }
+[data-ha-tools-export] input[type=checkbox] { width:24px;height:24px;flex:none;margin:10px; }
+[data-ha-tools-export] button { padding:8px 12px;white-space:normal;overflow-wrap:anywhere;cursor:pointer;border:1px solid var(--divider-color,#aaa);border-radius:6px;color:inherit;background:var(--secondary-background-color,var(--card-background-color,#f5f5f5)); }
+[data-ha-tools-export] :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
+[data-ha-tools-export] button:disabled { cursor:default;opacity:.6; }
+[data-ha-tools-export] .ht-export-actions { display:flex;flex-wrap:wrap;gap:8px;margin-top:16px; }
+[data-ha-tools-export] pre { max-width:100%;min-width:0;max-height:320px;overflow:auto;white-space:pre;margin:0;padding:12px;border:1px solid var(--divider-color,#aaa);background:var(--secondary-background-color,var(--card-background-color,#f5f5f5)); }
+[data-ha-tools-export] ul { padding-inline-start:22px;margin:0; }
+@container (max-width:499px) { [data-ha-tools-export] .ht-export-fields { grid-template-columns:minmax(0,1fr); } }
+@container (max-width:319px) { [data-ha-tools-export] [role=dialog] { padding:10px; } [data-ha-tools-export] .ht-export-actions button { flex:1 1 100%; } }
+`;
+  let container, nodes, L, ui, opener, alive = false, destroyed = false, serial = 0;
+  let pending = null, handoff = null, ready = null, observed = null;
+  const listeners = [];
+  const on = (target, event, handler, capture = false) => {
+    target.addEventListener(event, handler, capture);
+    listeners.push(() => target.removeEventListener(event, handler, capture));
+  };
+  const contextKeys = ['role', 'userId', 'connectionId', 'datasetId', 'revision'];
+  function readContext() {
+    try {
+      const value = getContext();
+      if (!value || contextKeys.some(k => !['string', 'number'].includes(typeof value[k]) || String(value[k]).trim() === '' || (typeof value[k] === 'number' && !Number.isFinite(value[k])))) return null;
+      return Object.freeze(Object.fromEntries([...contextKeys, 'connected', 'canExport', 'sourceConfirmed'].map(k => [k, value[k]])));
+    } catch { return null; }
+  }
+  const same = (a, b) => !!a && !!b && [...contextKeys, 'connected', 'canExport', 'sourceConfirmed'].every(k => a[k] === b[k]);
+  const available = c => !!c && c.connected === true && c.canExport === true && c.sourceConfirmed === true;
+  const draft = () => Object.freeze({ filename: nodes.filename.value, format: nodes.format.value, includePrivate: nodes.private.checked });
+  const sameDraft = (a, b) => a.filename === b.filename && a.format === b.format && a.includePrivate === b.includePrivate;
+  function validation(value) {
+    if (!formats.includes(value.format)) return 'invalidFormat';
+    const name = value.filename;
+    if (!name || [...name].length > 128 || name !== name.trim() || /[\p{Cc}\p{Cf}/\\<>:"|?*]/u.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(name)) return 'invalidName';
+    if (!name.endsWith(`.${value.format}`) || name.length <= value.format.length + 1) return 'extension';
+    return null;
+  }
+  function status(code, message) {
+    if (!alive) return;
+    const result = ui.status(code); // exact existing W4 labels/icons/codes
+    nodes.status.className = `ht-result-state ht-result-state--${result.code}`;
+    nodes.status.dataset.resultState = result.code;
+    nodes.status.replaceChildren();
+    const icon = doc.createElement('span'); icon.setAttribute('aria-hidden', 'true'); icon.textContent = result.icon;
+    nodes.status.append(icon, doc.createTextNode(` ${result.label}`));
+    nodes.message.textContent = ` ${L[message]}`;
+    nodes.save.disabled = !ready || !!pending || !!handoff;
+    nodes.refresh.disabled = !!pending || !!handoff;
+  }
+  function stop(job) {
+    if (!job) return;
+    if (job.timer !== null) clearTimer(job.timer);
+    job.timer = null; job.controller.abort();
+  }
+  function discard(resetPrivate = false) {
+    serial++; stop(pending); pending = null; ready = null;
+    if (alive) {
+      nodes.preview.textContent = ''; nodes.included.replaceChildren(); nodes.excluded.replaceChildren(); nodes['source-limit'].textContent = '';
+      if (resetPrivate) nodes.private.checked = false;
+    }
+  }
+  function contextChanged() {
+    if (!alive) return;
+    observed = readContext(); discard(true);
+    // Once a handoff began we cannot retract a browser download. Ignore its late
+    // callback and retain the prohibition on a second write until it settles.
+    if (handoff) handoff.controller.abort();
+    status(root.isConnected && available(observed) ? 'unconfirmed' : 'no_data', 'context');
+  }
+  function validContext(original) {
+    const current = readContext();
+    if (!root.isConnected || !same(original, current) || !available(current)) { contextChanged(); return false; }
+    return true;
+  }
+  function changeDraft() {
+    if (!alive) return;
+    if (!same(observed, readContext())) { contextChanged(); return; }
+    discard();
+    const error = validation(draft()); status(error ? 'error' : 'not_checked', error || 'changed');
+  }
+  function fillList(node, items) {
+    node.replaceChildren(...items.map(text => { const li = doc.createElement('li'); li.textContent = text; return li; }));
+  }
+  async function refresh() {
+    if (!alive || pending || handoff) return;
+    const current = readContext();
+    if (!same(observed, current)) { observed = current; discard(true); }
+    const value = draft(), error = validation(value);
+    discard();
+    if (error) { status('error', error); return; }
+    if (!root.isConnected || !available(current)) { status(!root.isConnected || current?.connected === false ? 'no_data' : 'unconfirmed', 'unavailable'); return; }
+    observed = current;
+    const job = { id: serial, context: current, draft: value, started: clock(), controller: new globalThis.AbortController(), timer: null };
+    pending = job; status('not_checked', 'busy');
+    const timeout = () => {
+      if (!alive || pending !== job) return;
+      discard(); status('unconfirmed', 'timeout');
+    };
+    job.timer = setTimer(timeout, 10000);
+    try {
+      const payload = await buildPayload(Object.freeze({ context: current, draft: value, policy, signal: job.controller.signal }));
+      if (!alive || pending !== job || job.id !== serial) return;
+      if (clock() - job.started >= 10000) { timeout(); return; }
+      if (!validContext(current)) return;
+      clearTimer(job.timer); job.timer = null;
+      if (!sameDraft(value, draft())) { changeDraft(); return; }
+      const { serialized, confirmed, sourceConfirmed, status: resultState, included, excluded, sourceLimit } = payload || {};
+      if (resultState === 'no_data' || serialized === '') { pending = null; status('no_data', 'noData'); return; }
+      if (confirmed !== true || sourceConfirmed !== true || !['success', 'partial'].includes(resultState) || typeof serialized !== 'string' || !strings(included) || !strings(excluded) || typeof sourceLimit !== 'string' || !sourceLimit.trim()) {
+        pending = null; status('unconfirmed', 'unconfirmed'); return;
+      }
+      // Freeze the only serialized bytes and build the only Blob NOW; Save never
+      // re-runs serialization or builds a second payload from potentially newer data.
+      ready = Object.freeze({ serialized, blob: new globalThis.Blob([serialized], { type: mime[value.format] }), context: current, draft: value });
+      nodes.preview.textContent = ready.serialized;
+      fillList(nodes.included, [...included]); fillList(nodes.excluded, [...excluded]);
+      nodes['source-limit'].textContent = sourceLimit;
+      pending = null; status(resultState, 'changed'); nodes.message.textContent = '';
+    } catch {
+      if (!alive || pending !== job || job.id !== serial) return;
+      if (clock() - job.started >= 10000) { timeout(); return; }
+      if (!validContext(current)) return;
+      discard(); status('error', 'buildError');
+    }
+  }
+  async function save() {
+    if (!alive || !ready || pending || handoff) return;
+    if (!validContext(ready.context)) return;
+    const value = draft(), error = validation(value);
+    if (error || !sameDraft(value, ready.draft) || nodes.preview.textContent !== ready.serialized) {
+      discard(); status(error ? 'error' : 'unconfirmed', error || 'changed'); return;
+    }
+    const snapshot = ready; ready = null; // consume intent BEFORE invoking adapter
+    const job = { id: serial, context: snapshot.context, controller: new globalThis.AbortController() };
+    handoff = job; status('unconfirmed', 'saving');
+    // choices cannot initiate another preview while the adapter result is unknown
+    for (const key of ['filename', 'format', 'private']) nodes[key].disabled = true;
+    try {
+      const result = await performDownload(Object.freeze({ serialized: snapshot.serialized, blob: snapshot.blob, filename: snapshot.draft.filename, format: snapshot.draft.format, context: snapshot.context, signal: job.controller.signal }));
+      if (!alive || handoff !== job || job.id !== serial || !validContext(job.context)) return;
+      status(result?.outcome === 'saved' ? 'success' : 'unconfirmed', result?.outcome === 'saved' ? 'saved' : result?.outcome === 'initiated' ? 'initiated' : 'unknown');
+    } catch {
+      if (alive && handoff === job && job.id === serial && validContext(job.context)) status('unconfirmed', 'unknown');
+    } finally {
+      if (handoff === job) {
+        handoff = null;
+        if (alive) {
+          for (const key of ['filename', 'format', 'private']) nodes[key].disabled = false;
+          nodes.refresh.disabled = false; nodes.save.disabled = true;
+          if (job.id !== serial) status('unconfirmed', 'unknown');
+        }
+      }
+    }
+  }
+  function focusable() {
+    return Array.from(nodes.dialog.querySelectorAll('input,select,button,[tabindex="0"]')).filter(el => !el.disabled);
+  }
+  function keydown(event) {
+    if (!alive) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
+    if (event.key === 'Tab') {
+      const items = focusable(), first = items[0], last = items.at(-1);
+      const active = nodes.dialog.getRootNode().activeElement || root.activeElement || doc.activeElement;
+      if (event.shiftKey && (active === first || !nodes.dialog.contains(active))) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (active === last || !nodes.dialog.contains(active))) { event.preventDefault(); first?.focus(); }
+    }
+  }
+  function cancel() {
+    if (!alive) return;
+    discard(true); if (handoff) handoff.controller.abort();
+    alive = false; listeners.splice(0).forEach(off => off()); container.remove();
+    container = null; nodes = null; observed = null;
+    // A pending handoff remains latched until settled: reopening never repeats it.
+    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus();
+    opener = null;
+  }
+  function open({ opener: target } = {}) {
+    if (destroyed) throw new Error('Export dialog destroyed');
+    if (alive) return;
+    const language = String(getLanguage());
+    L = copy[language.startsWith('pl') ? 'pl' : 'en'];
+    ui = createUiV3({ language });
+    opener = target || root.activeElement || doc.activeElement;
+    container = doc.createElement('div'); container.setAttribute('data-ha-tools-export', '');
+    // The own shadow boundary contains CSS and local IDs; adjacent W4 status
+    // elements retain their existing styling. Consumers can query this open root.
+    const shadow = container.attachShadow({ mode: 'open' });
+    if (root.host?.classList.contains('bento-dark')) container.classList.add('bento-dark');
+    const style = doc.createElement('style'); style.textContent = ':host{display:block;min-width:0;max-width:100%;}' + css + '\n' + ui.css;
+    shadow.append(style);
+    const shell = doc.createElement('div'); shell.setAttribute('data-ha-tools-export', ''); shadow.append(shell);
+    nodes = {};
+    const make = (tag, key, parent, text) => { const node = doc.createElement(tag); if (key) { node.dataset.export = key; nodes[key] = node; } if (text) node.textContent = text; parent.append(node); return node; };
+    const dialog = make('section', 'dialog', shell); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+    const title = make('h2', 'title', dialog, L.title);
+    // Locally unique IDs, no random or global counters/persistent state.
+    const prefix = `ht-export-${String(clock()).replace(/\W/g, '')}`;
+    title.id = prefix + '-title'; dialog.setAttribute('aria-labelledby', title.id);
+    const fields = make('div', null, dialog); fields.className = 'ht-export-fields';
+    const filenameLabel = make('label', null, fields); make('span', null, filenameLabel, L.filename);
+    const filename = make('input', 'filename', filenameLabel); filename.type = 'text'; filename.value = defaultFilename; filename.autocomplete = 'off';
+    const formatLabel = make('label', null, fields); make('span', null, formatLabel, L.format);
+    const format = make('select', 'format', formatLabel);
+    formats.forEach(value => { const option = make('option', null, format, value.toUpperCase()); option.value = value; }); format.value = defaultFormat;
+    const privateLabel = make('label', null, dialog); privateLabel.className = 'ht-export-private';
+    const privateInput = make('input', 'private', privateLabel); privateInput.type = 'checkbox'; privateInput.checked = false; make('span', null, privateLabel, L.private);
+    const statusLine = make('p', null, dialog); statusLine.setAttribute('role', 'status'); statusLine.setAttribute('aria-live', 'polite');
+    make('span', 'status', statusLine); make('span', 'message', statusLine);
+    for (const key of ['included', 'excluded']) { make('h3', null, dialog, L[key]); make('ul', key, dialog); }
+    make('h3', null, dialog, L.source); make('p', 'source-limit', dialog);
+    const previewHeading = make('h3', null, dialog, L.preview); previewHeading.id = prefix + '-preview';
+    const preview = make('pre', 'preview', dialog); preview.tabIndex = 0; preview.setAttribute('aria-labelledby', previewHeading.id);
+    const actions = make('div', null, dialog); actions.className = 'ht-export-actions';
+    for (const key of ['refresh', 'save', 'cancel']) { const button = make('button', key, actions, L[key]); button.type = 'button'; }
+    root.append(container); alive = true; observed = readContext();
+    for (const [key, event] of [['filename', 'input'], ['format', 'change'], ['private', 'change']]) on(nodes[key], event, changeDraft);
+    on(nodes.refresh, 'click', refresh); on(nodes.save, 'click', save); on(nodes.cancel, 'click', cancel);
+    on(doc, 'keydown', keydown, true);
+    on(doc, 'focusin', event => {
+      if (alive && !event.composedPath().includes(nodes.dialog)) focusable()[0]?.focus();
+    }, true);
+    // The consumer supplies exact opener even when its shadow DOM hides activeElement.
+    filename.focus();
+    if (handoff) {
+      for (const key of ['filename', 'format', 'private']) nodes[key].disabled = true;
+      preview.focus();
+      status('unconfirmed', 'saving');
+    } else { status('not_checked', 'changed'); void refresh(); }
+  }
+  function destroy() { cancel(); destroyed = true; }
+  return Object.freeze({ open, cancel, contextChanged, destroy });
+}
+// END HA TOOLS EXPORT V3
+
+// BEGIN HA CONFIG REPORTS V1 source-sha256=8b46ed465fbba193468fe8531266c7526d93e6a3b3fcba4be426a417323e7b00
+// Config Auditor reviewed report schema. No arbitrary raw-object export/redaction.
+function createAuditReports() {
+  const schema = 1, method = 'config-findings-v1', maxReports = 20, maxAge = 30 * 86400000;
+  const codes = ['success', 'partial', 'unconfirmed', 'error', 'not_checked', 'no_data'];
+  // Only identifiers explicitly authored by the current card / server fixtures.
+  // Unknown integration identifiers remain visible in live findings, never exported.
+  const groups = {
+    updates: ['core_update','supervisor_update','os_update','addon_updates','hacs_update'],
+    addons: ['host_network','unprotected_addons','auto_update','ssh_addon','mqtt_broker','risky_services','port_exposure','privileged_addons','exposed_addon_ports','non_ingress_addons','bt_usb_addons','supervisor_debug','supervisor_debug_block'],
+    network: ['ssl_external','ssl_internal','ssl_cert_managed','ssl_cert_check','camera_exposure','cors_config'],
+    inventory: ['user_count','multi_owner','local_only_users','automation_count','camera_count','media_exposure','person_tracking','host_chassis'],
+    configuration: ['shell_commands','webhooks','hacs_custom_repos','recorder_retention','unencrypted_backups','mqtt_anonymous','template_sensors'],
+    authentication: ['access_tokens','server_auth_legacy_api_password','server_auth_admin_mfa'],
+    server: ['server_http_ip_ban','server_http_trusted_proxies','server_yaml_plaintext_secrets'],
+  };
+  const catalog = Object.entries(groups).flatMap(([category, ids]) => ids.map(id => Object.freeze({id,category})));
+  const identities = new Map(catalog.map(c => [c.id,c]));
+  const aliases = { many_tokens: 'access_tokens', access_tokens_unavailable: 'access_tokens', mqtt_config: 'mqtt_anonymous' };
+  const unknownIds = new Set(['access_tokens_unavailable','mqtt_config','ssl_cert_managed','ssl_cert_check']);
+  const limits = ['finding_only_missing_not_resolved','no_remote_probe','bounded_server_scan'];
+  const opaque = value => typeof value === 'string' && /^c-[a-f0-9]{32}$/.test(value);
+  const validId = value => typeof value === 'string' && /^r-[a-f0-9]{32}$/.test(value);
+  const validTime = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value));
+  const version = value => typeof value === 'string' && /^\d+(?:\.[\da-z]+)+(?:[-+][\w.-]+)?$/i.test(value) && value.length < 64 ? value : null;
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const contextCopy = context => context && ['owner','instance','scope'].every(k => opaque(context[k])) ? Object.fromEntries(['owner','instance','scope'].map(k => [k,context[k]])) : null;
+  function summarize(checks) {
+    const counts = Object.fromEntries(codes.map(k => [k,0]));
+    checks.forEach(c => counts[c.status]++);
+    return counts;
+  }
+  function snapshot(data, {timestamp,context,id} = {}) {
+    if (!data || data.error || !data.findings || !validTime(timestamp) || !validId(id)) return null;
+    const found = new Map(); let omitted = false;
+    const priority = {not_checked:6,no_data:5,error:4,partial:3,unconfirmed:2,success:1};
+    for (const severity of ['critical','warning','info','pass']) {
+      const rows = data.findings[severity];
+      if (!Array.isArray(rows)) return null;
+      for (const f of rows) {
+        const identity = aliases[f?.id] || f?.id;
+        if (!identities.has(identity)) { omitted = true; continue; }
+        // No title/description parsing: missing-data semantics are selected from
+        // authored IDs and explicit resultState / skipped / server verification.
+        let status = f.skipped || f.verified === false || ['not_checked','no_data'].includes(f.resultState) || unknownIds.has(f.id) ? (f.resultState==='no_data'?'no_data':'not_checked')
+          : ['core_update','supervisor_update','mqtt_anonymous'].includes(identity) && severity === 'info' ? 'not_checked'
+          : identity.startsWith('server_') && f.verified !== true ? 'not_checked'
+          : severity === 'pass' ? 'success' : severity === 'critical' ? 'error' : severity === 'warning' ? 'partial' : 'unconfirmed';
+        const row = {id:identity,category:identities.get(identity).category,status,severity:status === 'not_checked' || status === 'no_data' ? 'unknown' : severity};
+        const prior = found.get(identity);
+        if (!prior || priority[status] > priority[prior.status]) found.set(identity,row);
+      }
+    }
+    const checks = catalog.map(c => found.get(c.id) || {...c,status:'not_checked',severity:'unknown'});
+    const counts = summarize(checks);
+    return {schema,method,id,timestamp,scope:'current-card-audit',source:'browser-and-config-auditor',serverVersion:version(data.serverVersion),status:checks.every(c=>c.status==='success')?'success':'partial',counts,checks,limits:[...limits,...(omitted?['unreviewed_or_availability_findings_omitted']:[])],context:contextCopy(context)};
+  }
+  function clean(report) {
+    if (!report || report.schema !== schema || report.method !== method || !validId(report.id) || !validTime(report.timestamp) || report.scope !== 'current-card-audit' || report.source !== 'browser-and-config-auditor' || !Array.isArray(report.checks) || report.checks.length !== catalog.length) return null;
+    const seen = new Set(), checks = [];
+    for (const c of report.checks) {
+      const authored = identities.get(c?.id);
+      if (!authored || seen.has(c.id) || c.category !== authored.category || !codes.includes(c.status) || !['critical','warning','info','pass','unknown'].includes(c.severity)) return null;
+      if ((c.status==='success' && c.severity!=='pass') || (['not_checked','no_data'].includes(c.status) && c.severity!=='unknown')) return null;
+      seen.add(c.id);checks.push({id:c.id,category:authored.category,status:c.status,severity:c.severity});
+    }
+    checks.sort((a,b)=>catalog.findIndex(c=>c.id===a.id)-catalog.findIndex(c=>c.id===b.id));
+    return {schema,method,id:report.id,timestamp:report.timestamp,scope:'current-card-audit',source:'browser-and-config-auditor',serverVersion:version(report.serverVersion),status:checks.every(c=>c.status==='success')?'success':'partial',counts:summarize(checks),checks,limits:[...limits,...(report.limits?.includes('unreviewed_or_availability_findings_omitted')?['unreviewed_or_availability_findings_omitted']:[])],context:contextCopy(report.context)};
+  }
+  function retain(items, now = Date.now()) {
+    if (!Array.isArray(items)) return [];
+    const seen = new Set();
+    return items.map(clean).filter(r=>r && Date.parse(r.timestamp)<=now && now-Date.parse(r.timestamp)<=maxAge).sort((a,b)=>Date.parse(b.timestamp)-Date.parse(a.timestamp)).filter(r=>{if(seen.has(r.id))return false;seen.add(r.id);return true;}).slice(0,maxReports);
+  }
+  function load(raw, now = Date.now()) {
+    if (typeof raw !== 'string' || raw.length > 1024*1024) return [];
+    try { const parsed=JSON.parse(raw);return parsed.schema===schema ? retain(parsed.reports,now) : []; } catch { return []; }
+  }
+  function compare(before,after) {
+    const incompatible = reason => ({compatible:false,reason,checks:[]});
+    if (!before || !after) return incompatible('select_two_saved_reports');
+    if (before.schema!==after.schema) return incompatible('schema_changed');
+    if (before.method!==after.method) return incompatible('method_changed');
+    if (before.scope!==after.scope || before.context?.scope!==after.context?.scope) return incompatible('scope_changed');
+    if (!contextCopy(before.context) || !contextCopy(after.context)) return incompatible('identity_unconfirmed');
+    if (before.context.owner!==after.context.owner) return incompatible('user_changed');
+    if (before.context.instance!==after.context.instance) return incompatible('instance_or_session_unconfirmed');
+    if (before.serverVersion!==after.serverVersion) return incompatible('integration_version_changed');
+    if (Date.parse(before.timestamp)>Date.parse(after.timestamp)) return incompatible('baseline_is_newer');
+    const prior = new Map(before.checks.map(c=>[c.id,c]));
+    const current = new Map(after.checks.map(c=>[c.id,c]));
+    const problem = c => c && ['critical','warning'].includes(c.severity) && ['error','partial'].includes(c.status);
+    const known = c => c && !['not_checked','no_data','unconfirmed'].includes(c.status);
+    const checks = [...new Set([...prior.keys(),...current.keys()])].map(id=>{
+      const a=prior.get(id),b=current.get(id);
+      const change=!known(b)||!known(a)?'unknown':problem(a)&&problem(b)?'still_present':problem(a)&&b.status==='success'?'resolved':problem(b)&&!problem(a)?'new':'unchanged';
+      return {id,change,status:b?.status||'not_checked',severity:b?.severity||'unknown'};
+    });
+    return {compatible:true,reason:null,checks};
+  }
+  function privateCounts(data) {
+    return {addons:data?.addonsAvailable===true && Array.isArray(data.addons)?data.addons.length:null,integrations:data?.integrationsAvailable===true && Array.isArray(data.integrations)?data.integrations.length:null,entities:count(data?.entities)};
+  }
+  function csvCell(value) {
+    let text=value===null?'unknown':String(value);
+    if (/^[\s\uFEFF]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text="'"+text;
+    return '"'+text.replace(/"/g,'""')+'"';
+  }
+  const labels = {
+    en:{source:'Completed browser audit and available Config Auditor checks',scope:'Current card audit; explicit check identities only',limits:'Missing, skipped and unverified checks do not prove resolution or security; remote reachability and certificates were not tested; server scan is bounded.',private:'Aggregate add-on, integration and entity counts only; unknown means not measured.',changes:{new:'New',still_present:'Still present',resolved:'Resolved',unknown:'Unknown / not checked',unchanged:'Unchanged'}},
+    pl:{source:'Zakończony audyt karty i dostępne kontrole Config Auditor',scope:'Audyt bieżącej karty; wyłącznie jawne identyfikatory kontroli',limits:'Brakujące, pominięte i niezweryfikowane kontrole nie dowodzą rozwiązania ani bezpieczeństwa; dostępności zdalnej i certyfikatów nie testowano; skan serwera jest ograniczony.',private:'Tylko łączne liczby dodatków, integracji i encji; unknown oznacza brak pomiaru.',changes:{new:'Nowe',still_present:'Nadal obecne',resolved:'Rozwiązane',unknown:'Nieznane / nie sprawdzono',unchanged:'Bez zmian'}},
+  };
+  function serialize(report, {format,includePrivate=false,privateCounts:privateInventory,language='en',comparison=null}={}) {
+    const r=clean(report);if(!r || !['json','csv','txt'].includes(format)) throw new TypeError('Reviewed saved report and explicit format required');
+    const pl=String(language).startsWith('pl'),L=labels[pl?'pl':'en'];
+    const stateLabels=pl?{success:'Sukces',partial:'Częściowo',unconfirmed:'Niepotwierdzony',error:'Błąd',not_checked:'Nie sprawdzono',no_data:'Brak danych'}:{success:'Success',partial:'Partial',unconfirmed:'Unconfirmed',error:'Error',not_checked:'Not checked',no_data:'No data'};
+    const output={schema:r.schema,method:r.method,reportTimestamp:r.timestamp,auditTimestamp:r.timestamp,source:r.source,sourceLabel:L.source,scope:r.scope,scopeLabel:L.scope,serverVersion:r.serverVersion,status:r.status,statusLabel:stateLabels[r.status],counts:r.counts,limits:r.limits,sourceLimit:L.limits,checks:r.checks.map(c=>({...c,statusLabel:stateLabels[c.status]}))};
+    if(includePrivate)output.privateInventory={addons:count(privateInventory?.addons),integrations:count(privateInventory?.integrations),entities:count(privateInventory?.entities)};
+    if(comparison)output.comparison={compatible:comparison.compatible===true,reason:['select_two_saved_reports','schema_changed','method_changed','scope_changed','identity_unconfirmed','user_changed','instance_or_session_unconfirmed','integration_version_changed','baseline_is_newer'].includes(comparison.reason)?comparison.reason:null,checks:comparison.compatible===true?comparison.checks.filter(c=>identities.has(c.id)&&Object.hasOwn(L.changes,c.change)).map(c=>({id:c.id,change:c.change,label:L.changes[c.change]})):[]};
+    if(format==='json')return JSON.stringify(output,null,2)+'\n';
+    const rows=[['type','id','value','status','label','severity','category']];
+    for(const key of ['schema','method','reportTimestamp','auditTimestamp','source','scope','serverVersion','sourceLimit'])rows.push(['metadata',key,output[key],'','','','']);
+    rows.push(['metadata','status',output.status,output.status,output.statusLabel,'','']);
+    for(const [key,value] of Object.entries(output.counts))rows.push(['count',key,value,key,stateLabels[key],'','']);
+    output.limits.forEach(value=>rows.push(['limit',value,L.limits,'','','','']));
+    output.checks.forEach(c=>rows.push(['check',c.id,'',c.status,c.statusLabel,c.severity,c.category]));
+    if(includePrivate)for(const [key,value]of Object.entries(output.privateInventory))rows.push(['private_inventory',key,value,'',L.private,'','']);
+    if(output.comparison){rows.push(['comparison','compatible',output.comparison.compatible,'',output.comparison.reason||'','','']);output.comparison.checks.forEach(c=>rows.push(['change',c.id,c.change,'',c.label,'','']));}
+    return format==='csv'?rows.map(row=>row.map(csvCell).join(',')).join('\r\n')+'\r\n':rows.map(row=>row.map(v=>v===null?'unknown':String(v)).join(' | ')).join('\n')+'\n';
+  }
+  return Object.freeze({schema,method,maxReports,maxAge,catalog,snapshot,clean,retain,load,compare,privateCounts,csvCell,serialize,labels});
+}
+// END HA CONFIG REPORTS V1
+
+const configReports = createAuditReports();
+// Opaque tokens exist only in this module instance. Neither account IDs nor HA
+// connection/config identities are persisted. A reload cannot confirm continuity.
+const reportConnections = new WeakMap();
+function reportToken(prefix = 'c-') {
+  const bytes = new Uint8Array(16);
+  if (!globalThis.crypto?.getRandomValues) return null;
+  globalThis.crypto.getRandomValues(bytes);
+  return prefix + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+function opaqueMapped(map,key) { if (!map.has(key)) map.set(key,reportToken()); return map.get(key); }
+
 // Component-local persistence retains this card's existing localStorage keys.
 const haToolsPersistence = { _cache: {}, _hass: null, setHass(h) { this._hass = h; }, async save(k, d) { try { localStorage.setItem('ha-config-auditor-' + k, JSON.stringify(d)); } catch(e) { console.debug('[ha-config-auditor] caught:', e); } }, async load(k) { try { const r = localStorage.getItem('ha-config-auditor-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } }, loadSync(k) { try { const r = localStorage.getItem('ha-config-auditor-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } } };
 
@@ -941,6 +1393,180 @@ class HAConfigAuditor extends HTMLElement {
     this._lastHtml = '';
     this._lastAuditTime = 0;
     this._auditEpoch = 0;
+    this._reportEpoch = 0;
+    this._reportContext = null;
+    this._savedReports = [];
+    this._reportsLoaded = false;
+    this._privateReportCounts = new Map();
+    this._reportCurrent = '';
+    this._reportBaseline = '';
+    this._reportNotice = '';
+    this._reportConnectionActive = true;
+    this._reportConnection = null;
+    this._reportConnectionOff = null;
+    this._exportDialog = null;
+    this._pendingExport = null;
+  }
+
+  _reportsKey() { return 'ha-config-auditor:manual-reports:v1'; }
+
+  _invalidateReportContext() {
+    this._reportEpoch++;
+    this._privateReportCounts?.clear();
+    this._exportDialog?.contextChanged();
+  }
+
+  _setReportIdentity() {
+    const h = this._hass;
+    if (h?.user?.is_admin !== true || typeof h.user.id !== 'string' || !h.user.id || !h.connection || !this._reportConnectionActive || h.connection.connected === false) {
+      this._reportContext = null; return;
+    }
+    const owner = this._reportOwnerToken || (this._reportOwnerToken = reportToken());
+    const instance = opaqueMapped(reportConnections, h.connection);
+    const scope = this._reportScopeToken || (this._reportScopeToken = reportToken());
+    this._reportContext = owner && instance && scope ? {owner,instance,scope} : null;
+  }
+
+  _bindReportConnection(connection) {
+    if (this._reportConnection === connection) return;
+    this._reportConnectionOff?.();
+    this._reportConnectionOff = null;
+    this._reportConnection = connection || null;
+    this._reportConnectionActive = connection?.connected !== false;
+    if (typeof connection?.addEventListener !== 'function') return;
+    const changed = () => {
+      this._reportSourceEpoch = (this._reportSourceEpoch || 0) + 1;
+      this._auditEpoch++;
+      this._invalidateReportContext();
+      this._exportDialog?.cancel();
+      this._reportConnectionActive = connection.connected !== false;
+      reportConnections.set(connection, reportToken());
+      this._reportContext = null;
+      this._auditData = null;
+      this._loading = false;
+      this._firstHassRender = false;
+      this._setReportIdentity();
+      this._updateContent();
+    };
+    const disconnected = () => {
+      changed();
+      this._reportConnectionActive = false;
+      this._reportContext = null;
+      this._updateReportControls();
+    };
+    connection.addEventListener('disconnected', disconnected);
+    connection.addEventListener('ready', changed);
+    this._reportConnectionOff = () => {
+      connection.removeEventListener?.('disconnected', disconnected);
+      connection.removeEventListener?.('ready', changed);
+    };
+  }
+
+  _loadManualReports() {
+    if (this._hass?.user?.is_admin !== true) return;
+    this._reportsLoaded = true;
+    try { this._savedReports = configReports.load(localStorage.getItem(this._reportsKey())); }
+    catch { this._savedReports = []; this._reportNotice = 'storage_error'; }
+  }
+
+  _saveManualReport() {
+    if (!this.isConnected || this._hass?.user?.is_admin !== true || this._loading || !this._reportContext || !this._reportConnectionActive || this._hass.connection?.connected === false || !this._auditData || this._auditData.error || !Number.isFinite(this._lastScan?.getTime())) return;
+    const id = reportToken('r-');
+    const report = configReports.snapshot(this._auditData, {id,timestamp:this._lastScan.toISOString(),context:this._reportContext});
+    if (!report) { this._reportNotice = 'identity_unconfirmed'; this._updateReportControls(); return; }
+    try {
+      // Read/merge only our new namespace at the explicit Save gesture. Existing
+      // scan, intro, support and unrelated storage keys are untouched.
+      const reports = configReports.retain([report, ...configReports.load(localStorage.getItem(this._reportsKey())), ...this._savedReports]);
+      localStorage.setItem(this._reportsKey(), JSON.stringify({schema:configReports.schema,reports}));
+      this._invalidateReportContext();
+      this._savedReports = reports;
+      this._privateReportCounts.set(id, configReports.privateCounts(this._auditData));
+      this._reportCurrent = id;
+      this._reportNotice = 'saved';
+    } catch { this._reportNotice = 'storage_error'; }
+    this._updateReportControls();
+  }
+
+  _selectedReport() { return this._savedReports.find(r => r.id === this._reportCurrent) || null; }
+  _selectedComparison() {
+    const before = this._savedReports.find(r => r.id === this._reportBaseline), after = this._selectedReport();
+    if (!before || !after) return null;
+    if (before.id === after.id) return {compatible:false,reason:'select_two_saved_reports',checks:[]};
+    if (!this._reportContext || before.context?.instance !== this._reportContext.instance || after.context?.instance !== this._reportContext.instance) return {compatible:false,reason:'instance_or_session_unconfirmed',checks:[]};
+    if (before.context?.owner !== this._reportContext.owner || after.context?.owner !== this._reportContext.owner) return {compatible:false,reason:'user_changed',checks:[]};
+    if (before.context?.scope !== this._reportContext.scope || after.context?.scope !== this._reportContext.scope) return {compatible:false,reason:'scope_changed',checks:[]};
+    return configReports.compare(before,after);
+  }
+
+  _reportExportContext() {
+    const report = this._selectedReport(), context = this._reportContext;
+    return {role:this._hass?.user?.is_admin === true?'admin':'household',userId:context?.owner||'unconfirmed-owner',connectionId:context?.instance||'unconfirmed-connection',datasetId:report?.id||'no-report',revision:this._reportEpoch,connected:this.isConnected && this._reportConnectionActive && this._hass?.connection?.connected !== false,canExport:this._hass?.user?.is_admin === true && !!report && !this._loading && !!context,sourceConfirmed:!!report && !!configReports.clean(report)};
+  }
+
+  _openReportExport(opener) {
+    const context = this._reportExportContext();
+    if (!context.canExport || !context.connected || !context.sourceConfirmed) return;
+    if (!this._exportDialog) this._exportDialog = createExportDialog({
+      root:this.shadowRoot,getContext:()=>this._reportExportContext(),getLanguage:()=>this._lang,createUiV3,
+      policy:{id:'config-reviewed-report-v1',allowlistedFields:['schema','method','reportTimestamp','auditTimestamp','source','scope','serverVersion','status','counts','limits','checks.id','checks.category','checks.status','checks.severity','comparison','privateInventory.addons','privateInventory.integrations','privateInventory.entities'],neverInclude:['tokens','users','addresses','raw_config','names','entity_names','raw_descriptions','integration_payloads']},
+      formats:['json','csv','txt'],defaultFormat:'json',defaultFilename:'config-audit-report.json',
+      buildPayload:({draft,signal})=>{
+        if (signal.aborted) throw new Error('Export cancelled');
+        const report = this._selectedReport();
+        const L = configReports.labels[this._lang];
+        const serialized = configReports.serialize(report,{format:draft.format,includePrivate:draft.includePrivate,privateCounts:this._privateReportCounts.get(report.id),language:this._lang,comparison:this._selectedComparison()});
+        return {serialized,confirmed:true,sourceConfirmed:true,status:report.status,included:[this._lang==='pl'?'Czas audytu, zakres, źródło, ograniczenia, stany i liczby jawnych kontroli':'Audit time, scope, source, limitations, explicit check states and counts', ...(draft.includePrivate?[L.private]:[])],excluded:[this._lang==='pl'?'Tokeny, konta użytkowników, nazwy, adresy, surowa konfiguracja, opisy i dane integracji':'Tokens, user accounts, names, addresses, raw configuration, descriptions and integration payloads',...(draft.includePrivate?[]:[this._lang==='pl'?'Prywatne liczby inwentarza':'Private inventory counts'])],sourceLimit:L.limits};
+      },
+      performDownload:async args=>{
+        const intent = {};
+        this._pendingExport = intent;
+        try { return await this._downloadReport(args); }
+        finally { if(this._pendingExport===intent)this._pendingExport=null; }
+      },
+    });
+    this._exportDialog.open({opener});
+  }
+
+  async _downloadReport({blob,filename,signal}) {
+    if (signal.aborted) return {outcome:'unknown'};
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = filename; anchor.hidden = true;
+    this.shadowRoot.append(anchor);
+    try { if(signal.aborted)return {outcome:'unknown'};anchor.click();return {outcome:'initiated'}; }
+    finally { anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),0); }
+  }
+
+  _updateReportControls() {
+    if (this._hass?.user?.is_admin !== true) return;
+    const root = this.shadowRoot.getElementById('report-tools');
+    if (!root) return;
+    const pl = this._lang === 'pl', ui = createUiV3({language:this._lang});
+    const L = pl ? {
+      title:'Raporty audytu',save:'Zapisz raport',export:'Eksportuj wybrany raport',baseline:'Wcześniejszy zapis',current:'Bieżący zapis',choose:'Wybierz zapis ręcznie',time:'Czas audytu',state:'Stan',checks:'Kontrole',local:'Raporty są zapisane tylko w tej przeglądarce dla tego origin. Retencja: maks. 20 zapisów z ostatnich 30 dni. Starsze zapisy są pomijane przy odczycie i usuwane przy następnym ręcznym zapisie. Zapis jest ręczny; nie przechowuje surowych wyników ani danych użytkowników. Po przeładowaniu lub zmianie połączenia tożsamość instancji HA nie jest potwierdzona.',empty:'Brak zapisanych raportów',identity_unconfirmed:'Tożsamość użytkownika lub połączenia niepotwierdzona; zapis niedostępny.',storage_error:'Nie udało się potwierdzić zapisu w przeglądarce.',saved:'Raport zapisany lokalnie.',new:'Nowe',still_present:'Nadal obecne',resolved:'Rozwiązane',unknown:'Nieznane / nie sprawdzono',unchanged:'Bez zmian',select_two_saved_reports:'Wybierz dwa różne zapisane raporty.',schema_changed:'Nieporównywalne: zmiana wersji schematu.',method_changed:'Nieporównywalne: zmiana metody.',scope_changed:'Nieporównywalne: inny zakres.',user_changed:'Nieporównywalne: inny użytkownik.',instance_or_session_unconfirmed:'Nieporównywalne: tożsamość instancji HA / sesji niepotwierdzona po przeładowaniu lub zmianie połączenia.',integration_version_changed:'Nieporównywalne: zmiana wersji integracji.',baseline_is_newer:'Nieporównywalne: wcześniejszy zapis jest nowszy od bieżącego.'
+    } : {
+      title:'Audit reports',save:'Save report',export:'Export selected report',baseline:'Earlier saved report',current:'Current saved report',choose:'Choose a saved report manually',time:'Audit time',state:'Status',checks:'Checks',local:'Reports are stored only in this browser for this origin. Retention: at most 20 reports from the last 30 days. Older records are ignored on read and removed on the next manual save. Saving is manual; raw findings and user data are excluded. After reload or connection changes the HA instance identity is unconfirmed.',empty:'No saved reports',identity_unconfirmed:'User or connection identity unconfirmed; saving unavailable.',storage_error:'Browser storage save could not be confirmed.',saved:'Report saved locally.',new:'New',still_present:'Still present',resolved:'Resolved',unknown:'Unknown / not checked',unchanged:'Unchanged',select_two_saved_reports:'Select two different saved reports.',schema_changed:'Incompatible: schema version changed.',method_changed:'Incompatible: method changed.',scope_changed:'Incompatible: scope changed.',user_changed:'Incompatible: user changed.',instance_or_session_unconfirmed:'Incompatible: HA instance / session identity is unconfirmed after reload or connection change.',integration_version_changed:'Incompatible: integration version changed.',baseline_is_newer:'Incompatible: baseline is newer than current report.'
+    };
+    const focused = root.contains(this.shadowRoot.activeElement) ? this.shadowRoot.activeElement.className : null;
+    this._savedReports = configReports.retain(this._savedReports);
+    const canSave = !this._loading && !!this._auditData?.findings && !this._auditData.error && Number.isFinite(this._lastScan?.getTime()) && !!this._reportContext && this._reportConnectionActive && this._hass.connection?.connected !== false;
+    const options = selected => `<option value="">${_esc(L.choose)}</option>`+this._savedReports.map((r,i)=>`<option value="${r.id}" ${selected===r.id?'selected':''}>${_esc(r.timestamp)} · ${_esc(ui.status(r.status).label)} · ${i+1}</option>`).join('');
+    const selected = this._selectedReport(), comparison = this._selectedComparison();
+    let details = selected ? `${ui.statusHtml(selected.status)}<p>${_esc(configReports.labels[this._lang].limits)}</p>` : '';
+    if(comparison) {
+      if(!comparison.compatible) details += `${ui.statusHtml('unconfirmed')}<p>${_esc(L[comparison.reason]||L.identity_unconfirmed)}</p>`;
+      else details += `<table><thead><tr><th>${_esc(L.checks)}</th><th>${_esc(L.state)}</th></tr></thead><tbody>${comparison.checks.filter(c=>c.change!=='unchanged').map(c=>`<tr><td data-label="${_esc(L.checks)}">${_esc(c.id)}</td><td data-label="${_esc(L.state)}">${_esc(L[c.change])} ${ui.statusHtml(c.status)}</td></tr>`).join('')}</tbody></table>`;
+    }
+    root.innerHTML = `<h3>${_esc(L.title)}</h3><p>${_esc(L.local)}</p><div class="report-actions"><button type="button" class="report-save" ${canSave?'':'disabled'}>${_esc(L.save)}</button><button type="button" class="report-export" ${selected&&this._reportExportContext().canExport?'':'disabled'}>${_esc(L.export)}</button></div><p role="status" aria-live="polite">${_esc(L[this._reportNotice] || (!this._reportContext?L.identity_unconfirmed:''))}</p><div class="report-choices"><label>${_esc(L.baseline)}<select class="report-baseline">${options(this._reportBaseline)}</select></label><label>${_esc(L.current)}<select class="report-current">${options(this._reportCurrent)}</select></label></div>${this._savedReports.length?'':`<p>${_esc(L.empty)}</p>`}${details}`;
+    root.querySelector('.report-save').addEventListener('click',()=>this._saveManualReport());
+    root.querySelector('.report-export').addEventListener('click',event=>this._openReportExport(event.currentTarget));
+    for(const [key,field]of [['baseline','_reportBaseline'],['current','_reportCurrent']])root.querySelector('.report-'+key).addEventListener('change',event=>{
+      this._invalidateReportContext();
+      this[field]=event.currentTarget.value;
+      this._updateReportControls();
+    });
+    if(focused && ['report-save','report-export','report-current','report-baseline'].includes(focused))root.querySelector('.'+focused)?.focus();
   }
 
   // -- Persistence --
@@ -975,12 +1601,25 @@ class HAConfigAuditor extends HTMLElement {
     } catch (e) {}
     try {
       const previousLanguage = this._lang;
+      const oldConnection = this._hass?.connection;
       this._hass = hass;
+      const connectionChanged = oldConnection !== hass?.connection;
+      const offline = hass?.connection?.connected === false;
+      const availabilityChanged = this._reportWasOffline !== undefined && this._reportWasOffline !== offline;
+      this._reportWasOffline = offline;
+      if (connectionChanged || availabilityChanged) {
+        this._reportSourceEpoch = (this._reportSourceEpoch || 0) + 1;
+        this._invalidateReportContext();
+        this._reportContext = null;
+        if (hass?.connection && typeof hass.connection === 'object') reportConnections.set(hass.connection, reportToken());
+      }
+      this._bindReportConnection(hass?.connection);
       this._lang = (hass?.language || navigator.language || '').startsWith('pl') ? 'pl' : 'en';
       const authorityChanged = this._authorityAdmin !== hass?.user?.is_admin || this._authorityUserId !== hass?.user?.id;
+      if (authorityChanged) { this._invalidateReportContext(); this._reportOwnerToken = null; this._reportContext = null; }
       this._authorityAdmin = hass?.user?.is_admin;
       this._authorityUserId = hass?.user?.id;
-      if (authorityChanged || hass?.user?.is_admin !== true) {
+      if (authorityChanged || connectionChanged || availabilityChanged || offline || hass?.user?.is_admin !== true) {
         this._auditEpoch++;
         this._auditData = null;
         this._loading = false;
@@ -989,7 +1628,20 @@ class HAConfigAuditor extends HTMLElement {
         this._currentPage = {};
       }
       if (!this._config) this._config = { title: 'Config Auditor' };
-      if (hass?.user?.is_admin !== true) { this._render(); return; }
+      if (hass?.user?.is_admin !== true) {
+        this._exportDialog?.cancel();
+        this._reportContext = null;
+        this._reportOwnerToken = this._reportScopeToken = null;
+        this._savedReports = [];
+        this._reportsLoaded = false;
+        this._privateReportCounts.clear();
+        this._reportCurrent = this._reportBaseline = '';
+        this._reportNotice = '';
+        this._render(); return;
+      }
+      if (offline) { this._loading = false; this._render(); this._updateContent(); return; }
+      if (authorityChanged || connectionChanged || availabilityChanged || !this._reportContext) this._setReportIdentity();
+      if (authorityChanged || connectionChanged || availabilityChanged || !this._reportsLoaded) this._loadManualReports();
       const now = Date.now();
       if (!this._firstHassRender) {
         this._firstHassRender = true;
@@ -1070,6 +1722,8 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   _updateLocale() {
+    this._invalidateReportContext();
+    this._updateReportControls();
     const labels = { overview: 'Overview', critical: 'Findings', addons: 'Addons & Integrations', network: 'Network', users: 'Users', tips: 'Tips' };
     this.shadowRoot.querySelectorAll('[role="tab"]').forEach(tab => { tab.textContent = this._msg(labels[tab.dataset.tab]); });
     const refresh = this.shadowRoot.querySelector('.audit-refresh');
@@ -1094,8 +1748,11 @@ class HAConfigAuditor extends HTMLElement {
 
   setConfig(config) {
     const cfg = config || {};
+    this._invalidateReportContext();
+    if (String(this._config?.storage_key || 'default') !== String(cfg.storage_key || 'default')) this._reportScopeToken = null;
     this._config = { title: cfg.title || 'Config Auditor', ...cfg };
-    this._loadScanData();
+    if (this._hass?.user?.is_admin !== false) this._loadScanData();
+    if (this._hass?.user?.is_admin === true) this._setReportIdentity();
     if (this._hass) { this._lastHtml = ''; this._render(); }
   }
 
@@ -1107,6 +1764,8 @@ class HAConfigAuditor extends HTMLElement {
 
   _renderError(error) {
     const message = error?.message || String(error || 'Unknown render error');
+    this._invalidateReportContext();
+    this._exportDialog?.cancel();
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; }
@@ -1132,8 +1791,11 @@ class HAConfigAuditor extends HTMLElement {
     const auditHass = this._hass;
     const auditUserId = auditHass.user.id;
     const requestWS = auditHass.callWS.bind(auditHass);
+    this._invalidateReportContext();
+    const auditConnection = auditHass.connection;
+    const sourceEpoch = this._reportSourceEpoch || 0;
     const epoch = ++this._auditEpoch;
-    const isCurrent = () => epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditUserId;
+    const isCurrent = () => sourceEpoch === (this._reportSourceEpoch || 0) && this._hass?.connection === auditConnection && this._reportConnectionActive && auditConnection?.connected !== false && epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditUserId;
     const callWS = async message => {
       if (!isCurrent()) throw new Error('Audit authority changed');
       const response = await requestWS(message);
@@ -1378,7 +2040,8 @@ class HAConfigAuditor extends HTMLElement {
             skipped: sf.status === 'skipped',
             desc: sf.detail,
             fix: sf.fix || '',
-            verified: sf.status !== 'skipped',
+            verified: ['fail', 'warning', 'info', 'pass'].includes(sf.status),
+            resultState: sf.status === 'skipped' || !['fail', 'warning', 'info', 'pass'].includes(sf.status) ? 'not_checked' : undefined,
           });
         }
         serverVersion = server.version || '';
@@ -1640,6 +2303,7 @@ class HAConfigAuditor extends HTMLElement {
     if (this._hass?.user?.is_admin !== true) {
       const html = `<style>${HA_CONFIG_AUDITOR_BENTO_CSS}</style><div class="card" role="status">${_esc(this._t.adminRequired)}</div>`;
       this._lastHtml = html;
+      this._exportDialog?.cancel();
       this.shadowRoot.innerHTML = html;
       return;
     }
@@ -2280,6 +2944,17 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         }
       
 
+
+.report-tools { container-type:inline-size;min-width:0;margin:16px 0;padding:12px;border:1px solid var(--bento-border);border-radius:12px; }
+.report-tools p,.report-tools h3,.report-tools td { overflow-wrap:anywhere; }
+.report-tools .report-actions,.report-tools .report-choices { display:flex;flex-wrap:wrap;gap:8px; }
+.report-tools button,.report-tools select { min-height:44px;min-width:44px;font:inherit;max-width:100%;white-space:normal; }
+.report-tools button { padding:8px 12px; }
+.report-tools label { display:flex;flex:1 1 220px;min-width:0;flex-direction:column;gap:4px; }
+.report-tools table { width:100%;border-collapse:collapse;table-layout:fixed; }
+.report-tools th,.report-tools td { padding:8px;text-align:start;vertical-align:top; }
+.report-tools :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
+@container (max-width:499px) { .report-tools table,.report-tools tbody,.report-tools tr,.report-tools td { display:block;width:100%; } .report-tools thead { display:none; } .report-tools tr { margin:8px 0;border:1px solid var(--bento-border);border-radius:8px; } .report-tools td::before { content:attr(data-label) ': ';font-weight:600; } }
 </style>
         ${_renderLocalIntro(this._lang)}
         <div class="card">
@@ -2295,6 +2970,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
             <button class="tab-button ${this._activeTab === 'users' ? 'active' : ''}" data-tab="users" role="tab" aria-selected="${this._activeTab === 'users'}">${_esc(this._msg('Users'))}</button>
             <button class="tab-button ${this._activeTab === 'tips' ? 'active' : ''}" data-tab="tips" role="tab" aria-selected="${this._activeTab === 'tips'}">${_esc(this._msg('Tips'))}</button>
           </div>
+          <div class="report-tools" id="report-tools"></div>
           <div id="content"></div>
         
         </div>
@@ -2302,6 +2978,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     `;
     if (this._lastHtml === html) return;
     this._lastHtml = html;
+    this._exportDialog?.cancel();
     this.shadowRoot.innerHTML = html;
     _bindLocalIntroDismiss(this.shadowRoot);
     _bindLocalSupportDismiss(this.shadowRoot);
@@ -2315,6 +2992,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         });
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
+        this._invalidateReportContext();
         this._activeTab = btn.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this._activeTab);
         this._updateContent();
@@ -2333,6 +3011,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
     if (this._hass?.user?.is_admin !== true) { this._render(); return; }
     const content = this.shadowRoot.getElementById('content');
     if (!content) return;
+    this._updateReportControls();
     const refresh = this.shadowRoot.querySelector('.audit-refresh');
     if (refresh) { refresh.disabled = this._loading; refresh.textContent = this._t.refresh; }
     if (this._loading) { content.innerHTML = `<div class="loading"><div class="spinner"></div>${_esc(this._msg('Running configuration best-practices audit...'))}</div>`; return; }
@@ -2350,7 +3029,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   _renderOverview(d) {
-    let html = `<div class="audit-summary-section">
+    const report = this._auditData && Number.isFinite(this._lastScan?.getTime()) ? configReports.snapshot(d, {timestamp:this._lastScan.toISOString(),context:this._reportContext,id:'r-'+'0'.repeat(32)}) : null;
+    let html = `${report ? createUiV3({language:this._lang}).statusHtml(report.status) + '<p>' + _esc(configReports.labels[this._lang].limits) + '</p>' : ''}<div class="audit-summary-section">
       <h3>Configuration best-practice summary</h3>
       <p>${d.totalChecks} checks run. Review failed and warning items first, then informational findings.</p>
       <div class="summary-grid">
@@ -2618,12 +3298,23 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   disconnectedCallback() {
+    this._reportSourceEpoch = (this._reportSourceEpoch || 0) + 1;
+    this._invalidateReportContext();
+    this._exportDialog?.cancel();
+    this._reportConnectionOff?.();
+    this._reportConnectionOff = null;
+    this._reportConnection = null;
+    this._reportContext = null;
+    this._auditData = null;
+    this._savedReports = [];
+    this._reportsLoaded = false;
     this._auditEpoch++;
     this._loading = false;
     this._firstHassRender = false;
   }
 
   setActiveTab(tabId) {
+    this._invalidateReportContext();
     this._activeTab = tabId;
     this._render();
   }

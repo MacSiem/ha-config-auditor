@@ -64,7 +64,7 @@ async function fixture(language='en') {
  dom.window.Blob=globalThis.Blob;dom.window.AbortController=globalThis.AbortController;
  dom.window.eval(fs.readFileSync(path.join(__dirname,'../ha-config-auditor.js'),'utf8'));
  const card=dom.window.document.createElement('ha-config-auditor');card.setConfig({title:'QA'});dom.window.document.body.append(card);
- const connection={connected:true};let reads=0;
+ const connection=new dom.window.EventTarget();connection.connected=true;let reads=0;
  const hass={language,connection,user:{id:'CANARY-ADMIN',is_admin:true},states:{},config:{components:[],version:'2026.10.0'},themes:{},callWS:async m=>{reads++;if(m.type==='config/auth/list'||m.type==='config_entries/get'||m.type==='auth/refresh_tokens')return [];if(m.type==='ha_config_auditor/audit')return {version:'6.0.2',findings:[{id:'http_ip_ban',status:'pass',title:'CANARY',detail:'CANARY'}]};throw Error('Unavailable');}};
  card.hass=hass;await flush();assert.equal(card._loading,false);
  const find=k=>card.shadowRoot.querySelector('[data-ha-tools-export]')?.shadowRoot.querySelector(`[data-export="${k}"]`);
@@ -127,4 +127,54 @@ test('unverified, contradictory and six authored status codes never produce fals
  assert.deepEqual(Object.keys(r.counts),['success','partial','unconfirmed','error','not_checked','no_data']);
  const knownClear=snap(data({pass:[{id:'core_update'}]}));const unknown=snap(data());const problem=snap(data({warning:[{id:'core_update'}]}));
  assert.equal(reports.compare(knownClear,problem).checks.find(c=>c.id==='core_update').change,'new');assert.equal(reports.compare(unknown,problem).checks.find(c=>c.id==='core_update').change,'unknown');
+});
+
+test('all actual authored backend checks are retained without evidence or raw descriptions',()=>{
+ const a=snap(data({warning:[{id:'server_auth_trusted_networks',verified:true,desc:'CANARY'}],pass:[{id:'server_auth_providers',verified:true}],info:[{id:'server_http_transport',verified:true}]}));
+ assert.equal(a.checks.find(c=>c.id==='server_auth_trusted_networks')?.status,'partial');
+ assert.equal(a.checks.find(c=>c.id==='server_auth_providers')?.status,'success');
+ assert.equal(a.checks.find(c=>c.id==='server_http_transport')?.status,'unconfirmed');
+ assert.doesNotMatch(reports.serialize(a,{format:'json'}),/CANARY/);
+ const unavailable=snap(data({info:[{id:'server_auth_providers',skipped:true,verified:false}]}));
+ assert.equal(reports.compare(a,unavailable).checks.find(c=>c.id==='server_auth_providers')?.change,'unknown');
+});
+test('connection disconnected event revokes export before cached connected flag catches up',async()=>{
+ const f=await fixture();try{
+ const c=f.card;c.shadowRoot.querySelector('.report-save').click();c.shadowRoot.querySelector('.report-export').click();await flush();assert.ok(f.find('preview').textContent);
+ f.hass.connection.dispatchEvent(new f.dom.window.Event('disconnected'));
+ assert.equal(f.hass.connection.connected,true);assert.equal(c._reportContext,null);assert.equal(c._auditData,null);
+ assert.equal(f.find('preview'),undefined);assert.equal(c.shadowRoot.querySelector('.report-save').disabled,true);
+ c.hass=f.hass;await flush();assert.equal(c.shadowRoot.querySelector('.report-save').disabled,true);
+ }finally{f.cleanup();}
+});
+test('browser offline revokes consent and report actions until online and a new audit',async()=>{
+ const f=await fixture();try{
+ const c=f.card;c.shadowRoot.querySelector('.report-save').click();c.shadowRoot.querySelector('.report-export').click();await flush();assert.ok(f.find('preview').textContent);
+ f.dom.window.dispatchEvent(new f.dom.window.Event('offline'));
+ assert.equal(f.find('preview'),undefined);assert.equal(c._auditData,null);assert.equal(c.shadowRoot.querySelector('.report-save').disabled,true);
+ c.hass=f.hass;await flush();assert.equal(c.shadowRoot.querySelector('.report-save').disabled,true);
+ f.dom.window.dispatchEvent(new f.dom.window.Event('online'));c.hass=f.hass;await flush();assert.equal(c.shadowRoot.querySelector('.report-save').disabled,false);
+ }finally{f.cleanup();}
+});
+test('blocked storage reports the failure and never invents a saved report',async()=>{
+ const f=await fixture();try{
+ const proto=f.dom.window.Storage.prototype,set=proto.setItem;proto.setItem=function(){throw Error('synthetic quota')};
+ f.card.shadowRoot.querySelector('.report-save').click();assert.equal(f.card._savedReports.length,0);assert.equal(f.card._reportNotice,'storage_error');assert.match(f.card.shadowRoot.querySelector('#report-tools').textContent,/could not be confirmed/);
+ proto.setItem=set;
+ }finally{f.cleanup();}
+});
+test('manual reports use the current admin and card scope namespace without mixing accounts',async()=>{
+ const f=await fixture();try{
+ const c=f.card;c.shadowRoot.querySelector('.report-save').click();const firstKey=c._reportsKey(),raw=f.dom.window.localStorage.getItem(firstKey);assert.ok(raw);
+ c.hass={...f.hass,user:{id:'synthetic-second-admin',is_admin:true}};await flush();assert.notEqual(c._reportsKey(),firstKey);assert.equal(c._savedReports.length,0);assert.equal(f.dom.window.localStorage.getItem(firstKey),raw);
+ c.setConfig({title:'QA',storage_key:'another-card-scope'});c.hass=f.hass;await flush();assert.notEqual(c._reportsKey(),firstKey);assert.equal(c._savedReports.length,0);
+ }finally{f.cleanup();}
+});
+test('clearing local reports requires explicit confirmation and preserves unrelated keys',async()=>{
+ const f=await fixture();try{
+ const c=f.card;c.shadowRoot.querySelector('.report-save').click();const key=c._reportsKey();f.dom.window.localStorage.setItem('neighbor','keep');
+ c.shadowRoot.querySelector('.report-clear').click();assert.ok(f.dom.window.localStorage.getItem(key));assert.equal(c._savedReports.length,1);
+ c.shadowRoot.querySelector('.report-clear-cancel').click();assert.ok(f.dom.window.localStorage.getItem(key));
+ c.shadowRoot.querySelector('.report-clear').click();c.shadowRoot.querySelector('.report-clear-confirm').click();assert.equal(f.dom.window.localStorage.getItem(key),null);assert.equal(c._savedReports.length,0);assert.equal(f.dom.window.localStorage.getItem('neighbor'),'keep');
+ }finally{f.cleanup();}
 });
