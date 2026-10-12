@@ -1457,7 +1457,8 @@ class HAConfigAuditor extends HTMLElement {
     } catch { this._reportNotice = 'storage_error'; }
     this._reportClearArmed = false;
     this._updateReportControls();
-    this.shadowRoot.querySelector('.report-clear')?.focus();
+    const clear = this.shadowRoot.querySelector('.report-clear');
+    (clear && !clear.disabled ? clear : this.shadowRoot.querySelector('.report-save'))?.focus();
   }
 
   _invalidateReportContext() {
