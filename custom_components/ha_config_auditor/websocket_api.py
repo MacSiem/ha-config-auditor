@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .audit import async_run_audit
 from .const import DOMAIN
+from .report_identity import async_report_source
 
 
 @callback
@@ -35,6 +36,7 @@ async def ws_audit(
     if not is_loaded():
         connection.send_error(msg["id"], "unavailable", "Config Auditor integration is not loaded")
         return
+    audit_user_id = getattr(connection.user, "id", None)
     report = await async_run_audit(hass)
     if not connection.user.is_admin:
         connection.send_error(msg["id"], "unauthorized", "Administrator permissions are required")
@@ -42,4 +44,11 @@ async def ws_audit(
     if not is_loaded():
         connection.send_error(msg["id"], "unavailable", "Config Auditor integration was unloaded")
         return
-    connection.send_result(msg["id"], report)
+    source = await async_report_source(hass, audit_user_id)
+    if not connection.user.is_admin or getattr(connection.user, "id", None) != audit_user_id:
+        connection.send_error(msg["id"], "unauthorized", "Administrator permissions are required")
+        return
+    if not is_loaded():
+        connection.send_error(msg["id"], "unavailable", "Config Auditor integration was unloaded")
+        return
+    connection.send_result(msg["id"], {**report, "report_source": source})
