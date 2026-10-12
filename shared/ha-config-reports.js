@@ -21,9 +21,12 @@ function createAuditReports() {
   const opaque = value => typeof value === 'string' && /^c-[a-f0-9]{32}$/.test(value);
   const validId = value => typeof value === 'string' && /^r-[a-f0-9]{32}$/.test(value);
   const validTime = value => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value));
-  const version = value => typeof value === 'string' && /^\d+(?:\.[\da-z]+)+(?:[-+][\w.-]+)?$/i.test(value) && value.length < 64 ? value : null;
+  const version = value => typeof value === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-(?:alpha|beta|rc)(?:\.\d{1,4})?)?$/.test(value) ? value : null;
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
-  const contextCopy = context => context && ['owner','instance','scope'].every(k => opaque(context[k])) ? Object.fromEntries(['owner','instance','scope'].map(k => [k,context[k]])) : null;
+  const contextCopy = context => {
+    if (!context || !['owner','instance','scope'].every(k => opaque(context[k])) || (context.source !== undefined && !['core_uuid_readonly','browser_session'].includes(context.source))) return null;
+    return {...Object.fromEntries(['owner','instance','scope'].map(k => [k,context[k]])),source:context.source ?? 'browser_session'};
+  };
   function summarize(checks) {
     const counts = Object.fromEntries(codes.map(k => [k,0]));
     checks.forEach(c => counts[c.status]++);
@@ -83,7 +86,7 @@ function createAuditReports() {
     if (before.scope!==after.scope || before.context?.scope!==after.context?.scope) return incompatible('scope_changed');
     if (!contextCopy(before.context) || !contextCopy(after.context)) return incompatible('identity_unconfirmed');
     if (before.context.owner!==after.context.owner) return incompatible('user_changed');
-    if (before.context.instance!==after.context.instance) return incompatible('instance_or_session_unconfirmed');
+    if (before.context.instance!==after.context.instance) return incompatible(before.context.source==='core_uuid_readonly' && after.context.source==='core_uuid_readonly' ? 'instance_changed' : 'instance_or_session_unconfirmed');
     if (before.serverVersion!==after.serverVersion) return incompatible('integration_version_changed');
     if (Date.parse(before.timestamp)>Date.parse(after.timestamp)) return incompatible('baseline_is_newer');
     const prior = new Map(before.checks.map(c=>[c.id,c]));
@@ -115,7 +118,7 @@ function createAuditReports() {
     const stateLabels=pl?{success:'Sukces',partial:'Częściowo',unconfirmed:'Niepotwierdzony',error:'Błąd',not_checked:'Nie sprawdzono',no_data:'Brak danych'}:{success:'Success',partial:'Partial',unconfirmed:'Unconfirmed',error:'Error',not_checked:'Not checked',no_data:'No data'};
     const output={schema:r.schema,method:r.method,reportTimestamp:r.timestamp,auditTimestamp:r.timestamp,source:r.source,sourceLabel:L.source,scope:r.scope,scopeLabel:L.scope,serverVersion:r.serverVersion,status:r.status,statusLabel:stateLabels[r.status],counts:r.counts,limits:r.limits,sourceLimit:L.limits,checks:r.checks.map(c=>({...c,statusLabel:stateLabels[c.status]}))};
     if(includePrivate)output.privateInventory={addons:count(privateInventory?.addons),integrations:count(privateInventory?.integrations),entities:count(privateInventory?.entities)};
-    if(comparison)output.comparison={compatible:comparison.compatible===true,reason:['select_two_saved_reports','schema_changed','method_changed','scope_changed','identity_unconfirmed','user_changed','instance_or_session_unconfirmed','integration_version_changed','baseline_is_newer'].includes(comparison.reason)?comparison.reason:null,checks:comparison.compatible===true?comparison.checks.filter(c=>identities.has(c.id)&&Object.hasOwn(L.changes,c.change)).map(c=>({id:c.id,change:c.change,label:L.changes[c.change]})):[]};
+    if(comparison)output.comparison={compatible:comparison.compatible===true,reason:['select_two_saved_reports','schema_changed','method_changed','scope_changed','identity_unconfirmed','user_changed','instance_changed','instance_or_session_unconfirmed','integration_version_changed','baseline_is_newer'].includes(comparison.reason)?comparison.reason:null,checks:comparison.compatible===true?comparison.checks.filter(c=>identities.has(c.id)&&Object.hasOwn(L.changes,c.change)).map(c=>({id:c.id,change:c.change,label:L.changes[c.change]})):[]};
     if(format==='json')return JSON.stringify(output,null,2)+'\n';
     const rows=[['type','id','value','status','label','severity','category']];
     for(const key of ['schema','method','reportTimestamp','auditTimestamp','source','scope','serverVersion','sourceLimit'])rows.push(['metadata',key,output[key],'','','','']);
