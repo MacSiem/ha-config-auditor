@@ -1468,11 +1468,19 @@ class HAConfigAuditor extends HTMLElement {
     this._exportDialog?.contextChanged();
   }
 
+  _normalizeReportSource(value) {
+    const ref = v => typeof v === 'string' && /^c-[a-f0-9]{32}$/.test(v);
+    if (!value || value.schema !== 1 || value.source !== 'core_uuid_readonly' || value.confirmed !== true || !['instance','owner','scope'].every(k => ref(value[k]))) return null;
+    return {schema:1,source:'core_uuid_readonly',confirmed:true,instance:value.instance,owner:value.owner,scope:value.scope};
+  }
+
   _setReportIdentity() {
     const h = this._hass;
     if (h?.user?.is_admin !== true || typeof h.user.id !== 'string' || !h.user.id || !h.connection || !this._reportBrowserOnline || !this._reportConnectionActive || h.connection.connected === false) {
       this._reportContext = null; return;
     }
+    const source = this._normalizeReportSource(this._auditData?.reportSource);
+    if (source) { this._reportContext = {owner:source.owner,instance:source.instance,scope:source.scope}; return; }
     const owner = this._reportOwnerToken || (this._reportOwnerToken = reportToken());
     const instance = opaqueMapped(reportConnections, h.connection);
     const scope = this._reportScopeToken || (this._reportScopeToken = reportToken());
@@ -1596,16 +1604,17 @@ class HAConfigAuditor extends HTMLElement {
     if (!root) return;
     const pl = this._lang === 'pl', ui = createUiV3({language:this._lang});
     const L = pl ? {
-      title:'Raporty audytu',save:'Zapisz raport',export:'Eksportuj wybrany raport',baseline:'Wcześniejszy zapis',current:'Bieżący zapis',choose:'Wybierz zapis ręcznie',time:'Czas audytu',state:'Stan',checks:'Kontrole',local:'Raporty są zapisane tylko w tej przeglądarce dla tego konta i zakresu karty w danym origin. Retencja: maks. 20 zapisów z ostatnich 30 dni. Starsze zapisy są pomijane przy odczycie i usuwane przy następnym ręcznym zapisie. Zapis jest ręczny; nie przechowuje surowych wyników ani danych użytkowników. Po przeładowaniu lub zmianie połączenia tożsamość instancji HA nie jest potwierdzona.',empty:'Brak zapisanych raportów',identity_unconfirmed:'Tożsamość użytkownika lub połączenia niepotwierdzona; zapis niedostępny.',storage_error:'Nie udało się potwierdzić zapisu w przeglądarce.',saved:'Raport zapisany lokalnie.',clear:'Wyczyść zapisane raporty',clear_confirm:'Potwierdź usunięcie',clear_cancel:'Anuluj usunięcie',clear_prompt:'Usunąć wszystkie lokalne raporty tego konta i tej karty? Inne zapisy pozostaną.',cleared:'Lokalne raporty tego konta i karty zostały usunięte.',new:'Nowe',still_present:'Nadal obecne',resolved:'Rozwiązane',unknown:'Nieznane / nie sprawdzono',unchanged:'Bez zmian',select_two_saved_reports:'Wybierz dwa różne zapisane raporty.',schema_changed:'Nieporównywalne: zmiana wersji schematu.',method_changed:'Nieporównywalne: zmiana metody.',scope_changed:'Nieporównywalne: inny zakres.',user_changed:'Nieporównywalne: inny użytkownik.',instance_or_session_unconfirmed:'Nieporównywalne: tożsamość instancji HA / sesji niepotwierdzona po przeładowaniu lub zmianie połączenia.',integration_version_changed:'Nieporównywalne: zmiana wersji integracji.',baseline_is_newer:'Nieporównywalne: wcześniejszy zapis jest nowszy od bieżącego.'
+      title:'Raporty audytu',identity:'Potwierdzenie źródła',identity_known:'Bieżący audyt potwierdził źródło HA i konto. Zapisane raporty są porównywalne przy tej samej metodzie, wersji i zakresie.',identity_unknown:'Trwała tożsamość źródła lub konta jest niepotwierdzona. Po przeładowaniu porównanie pozostaje niedostępne.',save:'Zapisz raport',export:'Eksportuj wybrany raport',baseline:'Wcześniejszy zapis',current:'Bieżący zapis',choose:'Wybierz zapis ręcznie',time:'Czas audytu',state:'Stan',checks:'Kontrole',local:'Raporty są zapisane tylko w tej przeglądarce dla tego konta i zakresu karty w danym origin. Retencja: maks. 20 zapisów z ostatnich 30 dni. Starsze zapisy są pomijane przy odczycie i usuwane przy następnym ręcznym zapisie. Zapis jest ręczny; nie przechowuje surowych wyników ani danych użytkowników.',empty:'Brak zapisanych raportów',identity_unconfirmed:'Tożsamość użytkownika lub połączenia niepotwierdzona; zapis niedostępny.',storage_error:'Nie udało się potwierdzić zapisu w przeglądarce.',saved:'Raport zapisany lokalnie.',clear:'Wyczyść zapisane raporty',clear_confirm:'Potwierdź usunięcie',clear_cancel:'Anuluj usunięcie',clear_prompt:'Usunąć wszystkie lokalne raporty tego konta i tej karty? Inne zapisy pozostaną.',cleared:'Lokalne raporty tego konta i karty zostały usunięte.',new:'Nowe',still_present:'Nadal obecne',resolved:'Rozwiązane',unknown:'Nieznane / nie sprawdzono',unchanged:'Bez zmian',select_two_saved_reports:'Wybierz dwa różne zapisane raporty.',schema_changed:'Nieporównywalne: zmiana wersji schematu.',method_changed:'Nieporównywalne: zmiana metody.',scope_changed:'Nieporównywalne: inny zakres.',user_changed:'Nieporównywalne: inny użytkownik.',instance_or_session_unconfirmed:'Nieporównywalne: tożsamość instancji HA / sesji niepotwierdzona po przeładowaniu lub zmianie połączenia.',integration_version_changed:'Nieporównywalne: zmiana wersji integracji.',baseline_is_newer:'Nieporównywalne: wcześniejszy zapis jest nowszy od bieżącego.'
     } : {
-      title:'Audit reports',save:'Save report',export:'Export selected report',baseline:'Earlier saved report',current:'Current saved report',choose:'Choose a saved report manually',time:'Audit time',state:'Status',checks:'Checks',local:'Reports are stored only in this browser for this account and card scope on this origin. Retention: at most 20 reports from the last 30 days. Older records are ignored on read and removed on the next manual save. Saving is manual; raw findings and user data are excluded. After reload or connection changes the HA instance identity is unconfirmed.',empty:'No saved reports',identity_unconfirmed:'User or connection identity unconfirmed; saving unavailable.',storage_error:'Browser storage save could not be confirmed.',saved:'Report saved locally.',clear:'Clear saved reports',clear_confirm:'Confirm deletion',clear_cancel:'Cancel deletion',clear_prompt:'Delete all local reports for this account and card? Other saved data remains.',cleared:'Local reports for this account and card were removed.',new:'New',still_present:'Still present',resolved:'Resolved',unknown:'Unknown / not checked',unchanged:'Unchanged',select_two_saved_reports:'Select two different saved reports.',schema_changed:'Incompatible: schema version changed.',method_changed:'Incompatible: method changed.',scope_changed:'Incompatible: scope changed.',user_changed:'Incompatible: user changed.',instance_or_session_unconfirmed:'Incompatible: HA instance / session identity is unconfirmed after reload or connection change.',integration_version_changed:'Incompatible: integration version changed.',baseline_is_newer:'Incompatible: baseline is newer than current report.'
+      title:'Audit reports',identity:'Source confirmation',identity_known:'The current audit confirmed the HA source and account. Saved reports can be compared with the same method, version and scope.',identity_unknown:'Persistent source or account identity is unconfirmed. Comparison after reload remains unavailable.',save:'Save report',export:'Export selected report',baseline:'Earlier saved report',current:'Current saved report',choose:'Choose a saved report manually',time:'Audit time',state:'Status',checks:'Checks',local:'Reports are stored only in this browser for this account and card scope on this origin. Retention: at most 20 reports from the last 30 days. Older records are ignored on read and removed on the next manual save. Saving is manual; raw findings and user data are excluded.',empty:'No saved reports',identity_unconfirmed:'User or connection identity unconfirmed; saving unavailable.',storage_error:'Browser storage save could not be confirmed.',saved:'Report saved locally.',clear:'Clear saved reports',clear_confirm:'Confirm deletion',clear_cancel:'Cancel deletion',clear_prompt:'Delete all local reports for this account and card? Other saved data remains.',cleared:'Local reports for this account and card were removed.',new:'New',still_present:'Still present',resolved:'Resolved',unknown:'Unknown / not checked',unchanged:'Unchanged',select_two_saved_reports:'Select two different saved reports.',schema_changed:'Incompatible: schema version changed.',method_changed:'Incompatible: method changed.',scope_changed:'Incompatible: scope changed.',user_changed:'Incompatible: user changed.',instance_or_session_unconfirmed:'Incompatible: HA instance / session identity is unconfirmed after reload or connection change.',integration_version_changed:'Incompatible: integration version changed.',baseline_is_newer:'Incompatible: baseline is newer than current report.'
     };
     const focused = root.contains(this.shadowRoot.activeElement) ? this.shadowRoot.activeElement.className : null;
     this._savedReports = configReports.retain(this._savedReports);
     const canSave = !this._loading && !!this._auditData?.findings && !this._auditData.error && Number.isFinite(this._lastScan?.getTime()) && !!this._reportContext && this._reportBrowserOnline && this._reportConnectionActive && this._hass.connection?.connected !== false;
     const options = selected => `<option value="">${_esc(L.choose)}</option>`+this._savedReports.map((r,i)=>`<option value="${r.id}" ${selected===r.id?'selected':''}>${_esc(r.timestamp)} · ${_esc(ui.status(r.status).label)} · ${i+1}</option>`).join('');
     const selected = this._selectedReport(), comparison = this._selectedComparison();
-    let details = selected ? `${ui.statusHtml(selected.status)}<p>${_esc(configReports.labels[this._lang].limits)}</p>` : '';
+    const confirmedSource = !!this._normalizeReportSource(this._auditData?.reportSource);
+    let details = `<p>${_esc(L.identity)}: ${ui.statusHtml(confirmedSource?'success':'unconfirmed')}</p><p>${_esc(confirmedSource?L.identity_known:L.identity_unknown)}</p>` + (selected ? `${ui.statusHtml(selected.status)}<p>${_esc(configReports.labels[this._lang].limits)}</p>` : '');
     if(comparison) {
       if(!comparison.compatible) details += `${ui.statusHtml('unconfirmed')}<p>${_esc(L[comparison.reason]||L.identity_unconfirmed)}</p>`;
       else details += `<table><thead><tr><th>${_esc(L.checks)}</th><th>${_esc(L.state)}</th></tr></thead><tbody>${comparison.checks.filter(c=>c.change!=='unchanged').map(c=>`<tr><td data-label="${_esc(L.checks)}">${_esc(c.id)}</td><td data-label="${_esc(L.state)}">${_esc(L[c.change])} ${ui.statusHtml(c.status)}</td></tr>`).join('')}</tbody></table>`;
@@ -1866,6 +1875,7 @@ class HAConfigAuditor extends HTMLElement {
     const checks = [];
     const findings = { critical: [], warning: [], info: [], pass: [] };
     let serverVersion = null;
+    let reportSource = null;
 
     try {
       let hostInfo = null, osInfo = null, supervisorInfo = null, coreInfo = null;
@@ -2103,6 +2113,7 @@ class HAConfigAuditor extends HTMLElement {
           });
         }
         serverVersion = server.version || '';
+        reportSource = this._normalizeReportSource(server.report_source);
       } else {
         findings.info.push({
           id: 'server_checks_unavailable',
@@ -2332,8 +2343,9 @@ class HAConfigAuditor extends HTMLElement {
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
       if (!isCurrent()) return;
-      this._auditData = { serverVersion, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, integrationsAvailable, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
+      this._auditData = { serverVersion, reportSource, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, integrationsAvailable, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
+      this._setReportIdentity();
     this._saveScanData();
 
     } catch(e) {
