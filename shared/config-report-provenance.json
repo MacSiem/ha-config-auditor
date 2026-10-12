@@ -14,8 +14,8 @@
       "transform": "remove ESM export keyword only"
     },
     "shared/ha-config-reports.js": {
-      "sourceSha256": "8b46ed465fbba193468fe8531266c7526d93e6a3b3fcba4be426a417323e7b00",
-      "runtimeSha256": "b47c4beeeab92d3672984fbb5c42ea5d2b81e1cd069bee994aa00f42242f1e02",
+      "sourceSha256": "cef4c824ffdaaf9b07ea229ad2161061a56cf58cc2c943d83d5518324a4c6f4e",
+      "runtimeSha256": "ad93ff8dfc23fd063d1ab1d85bac8797aecb1c5b8df315bcc248c34c007a8fe1",
       "transform": "omit Node test export footer"
     }
   }

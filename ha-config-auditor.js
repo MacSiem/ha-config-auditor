@@ -1406,19 +1406,70 @@ class HAConfigAuditor extends HTMLElement {
     this._reportConnectionOff = null;
     this._exportDialog = null;
     this._pendingExport = null;
+    this._reportBrowserOnline = navigator.onLine !== false;
+    this._reportBrowserOff = null;
+    this._reportClearArmed = false;
   }
 
-  _reportsKey() { return 'ha-config-auditor:manual-reports:v1'; }
+  _reportsKey() {
+    // Account ID is a local storage namespace reference, never a report field or export.
+    const user = this._hass?.user;
+    if (user?.is_admin !== true || typeof user.id !== 'string' || !user.id) return null;
+    return 'ha-config-auditor:manual-reports:v1:' + encodeURIComponent(user.id) + ':' + encodeURIComponent(String(this._config?.storage_key || 'default'));
+  }
+
+  connectedCallback() {
+    this._reportBrowserOff?.();
+    this._reportBrowserOnline = navigator.onLine !== false;
+    const changed = online => {
+      this._reportBrowserOnline = online;
+      this._reportSourceEpoch = (this._reportSourceEpoch || 0) + 1;
+      this._auditEpoch++;
+      this._invalidateReportContext();
+      this._exportDialog?.cancel();
+      this._reportContext = null;
+      this._auditData = null;
+      this._loading = false;
+      this._firstHassRender = false;
+      if (this._hass?.connection && typeof this._hass.connection === 'object') reportConnections.set(this._hass.connection, reportToken());
+      if (online) this._setReportIdentity();
+      this._updateContent();
+    };
+    const offline = () => changed(false), online = () => changed(navigator.onLine !== false);
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    this._reportBrowserOff = () => { window.removeEventListener('offline', offline); window.removeEventListener('online', online); };
+  }
+
+  _clearManualReports(confirmed = false) {
+    if (!this.isConnected || this._hass?.user?.is_admin !== true || !this._reportContext || !this._reportConnectionActive || !this._reportBrowserOnline || this._hass.connection?.connected === false || this._pendingExport) return;
+    if (!confirmed) { this._reportClearArmed = true; this._updateReportControls(); return; }
+    if (!this._reportClearArmed) return;
+    try {
+      const key = this._reportsKey();
+      if (!key) return;
+      localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error('local_report_clear_unconfirmed');
+      this._invalidateReportContext();
+      this._savedReports = [];
+      this._reportCurrent = this._reportBaseline = '';
+      this._reportNotice = 'cleared';
+    } catch { this._reportNotice = 'storage_error'; }
+    this._reportClearArmed = false;
+    this._updateReportControls();
+    this.shadowRoot.querySelector('.report-clear')?.focus();
+  }
 
   _invalidateReportContext() {
     this._reportEpoch++;
+    this._reportClearArmed = false;
     this._privateReportCounts?.clear();
     this._exportDialog?.contextChanged();
   }
 
   _setReportIdentity() {
     const h = this._hass;
-    if (h?.user?.is_admin !== true || typeof h.user.id !== 'string' || !h.user.id || !h.connection || !this._reportConnectionActive || h.connection.connected === false) {
+    if (h?.user?.is_admin !== true || typeof h.user.id !== 'string' || !h.user.id || !h.connection || !this._reportBrowserOnline || !this._reportConnectionActive || h.connection.connected === false) {
       this._reportContext = null; return;
     }
     const owner = this._reportOwnerToken || (this._reportOwnerToken = reportToken());
@@ -1463,14 +1514,14 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   _loadManualReports() {
-    if (this._hass?.user?.is_admin !== true) return;
+    if (this._hass?.user?.is_admin !== true || !this._reportsKey()) return;
     this._reportsLoaded = true;
     try { this._savedReports = configReports.load(localStorage.getItem(this._reportsKey())); }
     catch { this._savedReports = []; this._reportNotice = 'storage_error'; }
   }
 
   _saveManualReport() {
-    if (!this.isConnected || this._hass?.user?.is_admin !== true || this._loading || !this._reportContext || !this._reportConnectionActive || this._hass.connection?.connected === false || !this._auditData || this._auditData.error || !Number.isFinite(this._lastScan?.getTime())) return;
+    if (!this.isConnected || this._hass?.user?.is_admin !== true || this._loading || !this._reportContext || !this._reportBrowserOnline || !this._reportConnectionActive || this._hass.connection?.connected === false || !this._auditData || this._auditData.error || !Number.isFinite(this._lastScan?.getTime())) return;
     const id = reportToken('r-');
     const report = configReports.snapshot(this._auditData, {id,timestamp:this._lastScan.toISOString(),context:this._reportContext});
     if (!report) { this._reportNotice = 'identity_unconfirmed'; this._updateReportControls(); return; }
@@ -1501,7 +1552,7 @@ class HAConfigAuditor extends HTMLElement {
 
   _reportExportContext() {
     const report = this._selectedReport(), context = this._reportContext;
-    return {role:this._hass?.user?.is_admin === true?'admin':'household',userId:context?.owner||'unconfirmed-owner',connectionId:context?.instance||'unconfirmed-connection',datasetId:report?.id||'no-report',revision:this._reportEpoch,connected:this.isConnected && this._reportConnectionActive && this._hass?.connection?.connected !== false,canExport:this._hass?.user?.is_admin === true && !!report && !this._loading && !!context,sourceConfirmed:!!report && !!configReports.clean(report)};
+    return {role:this._hass?.user?.is_admin === true?'admin':'household',userId:context?.owner||'unconfirmed-owner',connectionId:context?.instance||'unconfirmed-connection',datasetId:report?.id||'no-report',revision:this._reportEpoch,connected:this.isConnected && this._reportBrowserOnline && this._reportConnectionActive && this._hass?.connection?.connected !== false,canExport:this._hass?.user?.is_admin === true && !!report && !this._loading && !!context,sourceConfirmed:!!report && !!configReports.clean(report)};
   }
 
   _openReportExport(opener) {
@@ -1544,13 +1595,13 @@ class HAConfigAuditor extends HTMLElement {
     if (!root) return;
     const pl = this._lang === 'pl', ui = createUiV3({language:this._lang});
     const L = pl ? {
-      title:'Raporty audytu',save:'Zapisz raport',export:'Eksportuj wybrany raport',baseline:'Wcześniejszy zapis',current:'Bieżący zapis',choose:'Wybierz zapis ręcznie',time:'Czas audytu',state:'Stan',checks:'Kontrole',local:'Raporty są zapisane tylko w tej przeglądarce dla tego origin. Retencja: maks. 20 zapisów z ostatnich 30 dni. Starsze zapisy są pomijane przy odczycie i usuwane przy następnym ręcznym zapisie. Zapis jest ręczny; nie przechowuje surowych wyników ani danych użytkowników. Po przeładowaniu lub zmianie połączenia tożsamość instancji HA nie jest potwierdzona.',empty:'Brak zapisanych raportów',identity_unconfirmed:'Tożsamość użytkownika lub połączenia niepotwierdzona; zapis niedostępny.',storage_error:'Nie udało się potwierdzić zapisu w przeglądarce.',saved:'Raport zapisany lokalnie.',new:'Nowe',still_present:'Nadal obecne',resolved:'Rozwiązane',unknown:'Nieznane / nie sprawdzono',unchanged:'Bez zmian',select_two_saved_reports:'Wybierz dwa różne zapisane raporty.',schema_changed:'Nieporównywalne: zmiana wersji schematu.',method_changed:'Nieporównywalne: zmiana metody.',scope_changed:'Nieporównywalne: inny zakres.',user_changed:'Nieporównywalne: inny użytkownik.',instance_or_session_unconfirmed:'Nieporównywalne: tożsamość instancji HA / sesji niepotwierdzona po przeładowaniu lub zmianie połączenia.',integration_version_changed:'Nieporównywalne: zmiana wersji integracji.',baseline_is_newer:'Nieporównywalne: wcześniejszy zapis jest nowszy od bieżącego.'
+      title:'Raporty audytu',save:'Zapisz raport',export:'Eksportuj wybrany raport',baseline:'Wcześniejszy zapis',current:'Bieżący zapis',choose:'Wybierz zapis ręcznie',time:'Czas audytu',state:'Stan',checks:'Kontrole',local:'Raporty są zapisane tylko w tej przeglądarce dla tego konta i zakresu karty w danym origin. Retencja: maks. 20 zapisów z ostatnich 30 dni. Starsze zapisy są pomijane przy odczycie i usuwane przy następnym ręcznym zapisie. Zapis jest ręczny; nie przechowuje surowych wyników ani danych użytkowników. Po przeładowaniu lub zmianie połączenia tożsamość instancji HA nie jest potwierdzona.',empty:'Brak zapisanych raportów',identity_unconfirmed:'Tożsamość użytkownika lub połączenia niepotwierdzona; zapis niedostępny.',storage_error:'Nie udało się potwierdzić zapisu w przeglądarce.',saved:'Raport zapisany lokalnie.',clear:'Wyczyść zapisane raporty',clear_confirm:'Potwierdź usunięcie',clear_cancel:'Anuluj usunięcie',clear_prompt:'Usunąć wszystkie lokalne raporty tego konta i tej karty? Inne zapisy pozostaną.',cleared:'Lokalne raporty tego konta i karty zostały usunięte.',new:'Nowe',still_present:'Nadal obecne',resolved:'Rozwiązane',unknown:'Nieznane / nie sprawdzono',unchanged:'Bez zmian',select_two_saved_reports:'Wybierz dwa różne zapisane raporty.',schema_changed:'Nieporównywalne: zmiana wersji schematu.',method_changed:'Nieporównywalne: zmiana metody.',scope_changed:'Nieporównywalne: inny zakres.',user_changed:'Nieporównywalne: inny użytkownik.',instance_or_session_unconfirmed:'Nieporównywalne: tożsamość instancji HA / sesji niepotwierdzona po przeładowaniu lub zmianie połączenia.',integration_version_changed:'Nieporównywalne: zmiana wersji integracji.',baseline_is_newer:'Nieporównywalne: wcześniejszy zapis jest nowszy od bieżącego.'
     } : {
-      title:'Audit reports',save:'Save report',export:'Export selected report',baseline:'Earlier saved report',current:'Current saved report',choose:'Choose a saved report manually',time:'Audit time',state:'Status',checks:'Checks',local:'Reports are stored only in this browser for this origin. Retention: at most 20 reports from the last 30 days. Older records are ignored on read and removed on the next manual save. Saving is manual; raw findings and user data are excluded. After reload or connection changes the HA instance identity is unconfirmed.',empty:'No saved reports',identity_unconfirmed:'User or connection identity unconfirmed; saving unavailable.',storage_error:'Browser storage save could not be confirmed.',saved:'Report saved locally.',new:'New',still_present:'Still present',resolved:'Resolved',unknown:'Unknown / not checked',unchanged:'Unchanged',select_two_saved_reports:'Select two different saved reports.',schema_changed:'Incompatible: schema version changed.',method_changed:'Incompatible: method changed.',scope_changed:'Incompatible: scope changed.',user_changed:'Incompatible: user changed.',instance_or_session_unconfirmed:'Incompatible: HA instance / session identity is unconfirmed after reload or connection change.',integration_version_changed:'Incompatible: integration version changed.',baseline_is_newer:'Incompatible: baseline is newer than current report.'
+      title:'Audit reports',save:'Save report',export:'Export selected report',baseline:'Earlier saved report',current:'Current saved report',choose:'Choose a saved report manually',time:'Audit time',state:'Status',checks:'Checks',local:'Reports are stored only in this browser for this account and card scope on this origin. Retention: at most 20 reports from the last 30 days. Older records are ignored on read and removed on the next manual save. Saving is manual; raw findings and user data are excluded. After reload or connection changes the HA instance identity is unconfirmed.',empty:'No saved reports',identity_unconfirmed:'User or connection identity unconfirmed; saving unavailable.',storage_error:'Browser storage save could not be confirmed.',saved:'Report saved locally.',clear:'Clear saved reports',clear_confirm:'Confirm deletion',clear_cancel:'Cancel deletion',clear_prompt:'Delete all local reports for this account and card? Other saved data remains.',cleared:'Local reports for this account and card were removed.',new:'New',still_present:'Still present',resolved:'Resolved',unknown:'Unknown / not checked',unchanged:'Unchanged',select_two_saved_reports:'Select two different saved reports.',schema_changed:'Incompatible: schema version changed.',method_changed:'Incompatible: method changed.',scope_changed:'Incompatible: scope changed.',user_changed:'Incompatible: user changed.',instance_or_session_unconfirmed:'Incompatible: HA instance / session identity is unconfirmed after reload or connection change.',integration_version_changed:'Incompatible: integration version changed.',baseline_is_newer:'Incompatible: baseline is newer than current report.'
     };
     const focused = root.contains(this.shadowRoot.activeElement) ? this.shadowRoot.activeElement.className : null;
     this._savedReports = configReports.retain(this._savedReports);
-    const canSave = !this._loading && !!this._auditData?.findings && !this._auditData.error && Number.isFinite(this._lastScan?.getTime()) && !!this._reportContext && this._reportConnectionActive && this._hass.connection?.connected !== false;
+    const canSave = !this._loading && !!this._auditData?.findings && !this._auditData.error && Number.isFinite(this._lastScan?.getTime()) && !!this._reportContext && this._reportBrowserOnline && this._reportConnectionActive && this._hass.connection?.connected !== false;
     const options = selected => `<option value="">${_esc(L.choose)}</option>`+this._savedReports.map((r,i)=>`<option value="${r.id}" ${selected===r.id?'selected':''}>${_esc(r.timestamp)} · ${_esc(ui.status(r.status).label)} · ${i+1}</option>`).join('');
     const selected = this._selectedReport(), comparison = this._selectedComparison();
     let details = selected ? `${ui.statusHtml(selected.status)}<p>${_esc(configReports.labels[this._lang].limits)}</p>` : '';
@@ -1558,15 +1609,19 @@ class HAConfigAuditor extends HTMLElement {
       if(!comparison.compatible) details += `${ui.statusHtml('unconfirmed')}<p>${_esc(L[comparison.reason]||L.identity_unconfirmed)}</p>`;
       else details += `<table><thead><tr><th>${_esc(L.checks)}</th><th>${_esc(L.state)}</th></tr></thead><tbody>${comparison.checks.filter(c=>c.change!=='unchanged').map(c=>`<tr><td data-label="${_esc(L.checks)}">${_esc(c.id)}</td><td data-label="${_esc(L.state)}">${_esc(L[c.change])} ${ui.statusHtml(c.status)}</td></tr>`).join('')}</tbody></table>`;
     }
-    root.innerHTML = `<h3>${_esc(L.title)}</h3><p>${_esc(L.local)}</p><div class="report-actions"><button type="button" class="report-save" ${canSave?'':'disabled'}>${_esc(L.save)}</button><button type="button" class="report-export" ${selected&&this._reportExportContext().canExport?'':'disabled'}>${_esc(L.export)}</button></div><p role="status" aria-live="polite">${_esc(L[this._reportNotice] || (!this._reportContext?L.identity_unconfirmed:''))}</p><div class="report-choices"><label>${_esc(L.baseline)}<select class="report-baseline">${options(this._reportBaseline)}</select></label><label>${_esc(L.current)}<select class="report-current">${options(this._reportCurrent)}</select></label></div>${this._savedReports.length?'':`<p>${_esc(L.empty)}</p>`}${details}`;
+    root.innerHTML = `<h3>${_esc(L.title)}</h3><p>${_esc(L.local)}</p><div class="report-actions"><button type="button" class="report-save" ${canSave?'':'disabled'}>${_esc(L.save)}</button><button type="button" class="report-export" ${selected&&this._reportExportContext().canExport?'':'disabled'}>${_esc(L.export)}</button><button type="button" class="report-clear" ${this._savedReports.length&&this._reportContext&&!this._pendingExport?'':'disabled'}>${_esc(L.clear)}</button></div>${this._reportClearArmed ? `<div class="report-actions" role="group" aria-label="${_esc(L.clear_prompt)}"><p>${_esc(L.clear_prompt)}</p><button type="button" class="report-clear-confirm">${_esc(L.clear_confirm)}</button><button type="button" class="report-clear-cancel">${_esc(L.clear_cancel)}</button></div>` : ''}<p role="status" aria-live="polite">${_esc(L[this._reportNotice] || (!this._reportContext?L.identity_unconfirmed:''))}</p><div class="report-choices"><label>${_esc(L.baseline)}<select class="report-baseline">${options(this._reportBaseline)}</select></label><label>${_esc(L.current)}<select class="report-current">${options(this._reportCurrent)}</select></label></div>${this._savedReports.length?'':`<p>${_esc(L.empty)}</p>`}${details}`;
     root.querySelector('.report-save').addEventListener('click',()=>this._saveManualReport());
     root.querySelector('.report-export').addEventListener('click',event=>this._openReportExport(event.currentTarget));
+    root.querySelector('.report-clear').addEventListener('click',()=>this._clearManualReports());
+    root.querySelector('.report-clear-confirm')?.addEventListener('click',()=>this._clearManualReports(true));
+    root.querySelector('.report-clear-cancel')?.addEventListener('click',()=>{this._reportClearArmed=false;this._updateReportControls();root.querySelector('.report-clear')?.focus();});
+    root.onkeydown = event => { if (event.key === 'Escape' && this._reportClearArmed) { event.preventDefault();this._reportClearArmed=false;this._updateReportControls();root.querySelector('.report-clear')?.focus(); } };
     for(const [key,field]of [['baseline','_reportBaseline'],['current','_reportCurrent']])root.querySelector('.report-'+key).addEventListener('change',event=>{
       this._invalidateReportContext();
       this[field]=event.currentTarget.value;
       this._updateReportControls();
     });
-    if(focused && ['report-save','report-export','report-current','report-baseline'].includes(focused))root.querySelector('.'+focused)?.focus();
+    if(focused && ['report-save','report-export','report-current','report-baseline','report-clear','report-clear-confirm','report-clear-cancel'].includes(focused))root.querySelector('.'+focused)?.focus();
   }
 
   // -- Persistence --
@@ -1604,7 +1659,7 @@ class HAConfigAuditor extends HTMLElement {
       const oldConnection = this._hass?.connection;
       this._hass = hass;
       const connectionChanged = oldConnection !== hass?.connection;
-      const offline = hass?.connection?.connected === false;
+      const offline = !this._reportBrowserOnline || hass?.connection?.connected === false;
       const availabilityChanged = this._reportWasOffline !== undefined && this._reportWasOffline !== offline;
       this._reportWasOffline = offline;
       if (connectionChanged || availabilityChanged) {
@@ -1749,10 +1804,11 @@ class HAConfigAuditor extends HTMLElement {
   setConfig(config) {
     const cfg = config || {};
     this._invalidateReportContext();
-    if (String(this._config?.storage_key || 'default') !== String(cfg.storage_key || 'default')) this._reportScopeToken = null;
+    const scopeChanged = String(this._config?.storage_key || 'default') !== String(cfg.storage_key || 'default');
+    if (scopeChanged) { this._reportScopeToken = null; this._savedReports = []; this._reportCurrent = this._reportBaseline = ''; this._reportsLoaded = false; }
     this._config = { title: cfg.title || 'Config Auditor', ...cfg };
     if (this._hass?.user?.is_admin !== false) this._loadScanData();
-    if (this._hass?.user?.is_admin === true) this._setReportIdentity();
+    if (this._hass?.user?.is_admin === true) { this._setReportIdentity(); if (scopeChanged) this._loadManualReports(); }
     if (this._hass) { this._lastHtml = ''; this._render(); }
   }
 
@@ -1787,6 +1843,7 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   async _runAudit() {
+    if (!this._reportBrowserOnline) return;
     if (this._hass?.user?.is_admin !== true) return;
     const auditHass = this._hass;
     const auditUserId = auditHass.user.id;
@@ -1795,7 +1852,7 @@ class HAConfigAuditor extends HTMLElement {
     const auditConnection = auditHass.connection;
     const sourceEpoch = this._reportSourceEpoch || 0;
     const epoch = ++this._auditEpoch;
-    const isCurrent = () => sourceEpoch === (this._reportSourceEpoch || 0) && this._hass?.connection === auditConnection && this._reportConnectionActive && auditConnection?.connected !== false && epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditUserId;
+    const isCurrent = () => sourceEpoch === (this._reportSourceEpoch || 0) && this._hass?.connection === auditConnection && this._reportBrowserOnline && this._reportConnectionActive && auditConnection?.connected !== false && epoch === this._auditEpoch && this._hass?.user?.is_admin === true && this._hass.user.id === auditUserId;
     const callWS = async message => {
       if (!isCurrent()) throw new Error('Audit authority changed');
       const response = await requestWS(message);
@@ -3298,6 +3355,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   disconnectedCallback() {
+    this._reportBrowserOff?.();
+    this._reportBrowserOff = null;
     this._reportSourceEpoch = (this._reportSourceEpoch || 0) + 1;
     this._invalidateReportContext();
     this._exportDialog?.cancel();

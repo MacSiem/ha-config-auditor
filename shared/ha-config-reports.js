@@ -10,8 +10,8 @@ function createAuditReports() {
     network: ['ssl_external','ssl_internal','ssl_cert_managed','ssl_cert_check','camera_exposure','cors_config'],
     inventory: ['user_count','multi_owner','local_only_users','automation_count','camera_count','media_exposure','person_tracking','host_chassis'],
     configuration: ['shell_commands','webhooks','hacs_custom_repos','recorder_retention','unencrypted_backups','mqtt_anonymous','template_sensors'],
-    authentication: ['access_tokens','server_auth_legacy_api_password','server_auth_admin_mfa'],
-    server: ['server_http_ip_ban','server_http_trusted_proxies','server_yaml_plaintext_secrets'],
+    authentication: ['access_tokens','server_auth_providers','server_auth_legacy_api_password','server_auth_trusted_networks','server_auth_admin_mfa'],
+    server: ['server_http_transport','server_http_ip_ban','server_http_trusted_proxies','server_yaml_plaintext_secrets'],
   };
   const catalog = Object.entries(groups).flatMap(([category, ids]) => ids.map(id => Object.freeze({id,category})));
   const identities = new Map(catalog.map(c => [c.id,c]));
