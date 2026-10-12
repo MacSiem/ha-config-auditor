@@ -59,13 +59,13 @@ test('both private modes exclude raw findings, auth users, names, addresses, tok
  assert.equal(reports.privateCounts({...dangerous,addonsAvailable:false}).addons,null);
 });
 const flush = async () => { for(let i=0;i<100;i++) await new Promise(r=>setImmediate(r)); };
-async function fixture(language='en') {
+async function fixture(language='en',reportSource=null) {
  const dom=new JSDOM('',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://qa.invalid/',virtualConsole:new VirtualConsole()});
  dom.window.Blob=globalThis.Blob;dom.window.AbortController=globalThis.AbortController;
  dom.window.eval(fs.readFileSync(path.join(__dirname,'../ha-config-auditor.js'),'utf8'));
  const card=dom.window.document.createElement('ha-config-auditor');card.setConfig({title:'QA'});dom.window.document.body.append(card);
  const connection=new dom.window.EventTarget();connection.connected=true;let reads=0;
- const hass={language,connection,user:{id:'CANARY-ADMIN',is_admin:true},states:{},config:{components:[],version:'2026.10.0'},themes:{},callWS:async m=>{reads++;if(m.type==='config/auth/list'||m.type==='config_entries/get'||m.type==='auth/refresh_tokens')return [];if(m.type==='ha_config_auditor/audit')return {version:'6.0.2',findings:[{id:'http_ip_ban',status:'pass',title:'CANARY',detail:'CANARY'}]};throw Error('Unavailable');}};
+ const hass={language,connection,user:{id:'CANARY-ADMIN',is_admin:true},states:{},config:{components:[],version:'2026.10.0'},themes:{},callWS:async m=>{reads++;if(m.type==='config/auth/list'||m.type==='config_entries/get'||m.type==='auth/refresh_tokens')return [];if(m.type==='ha_config_auditor/audit')return {version:'6.0.2',report_source:reportSource,findings:[{id:'http_ip_ban',status:'pass',title:'CANARY',detail:'CANARY'}]};throw Error('Unavailable');}};
  card.hass=hass;await flush();assert.equal(card._loading,false);
  const find=k=>card.shadowRoot.querySelector('[data-ha-tools-export]')?.shadowRoot.querySelector(`[data-export="${k}"]`);
  return {dom,card,hass,reads:()=>reads,find,cleanup:()=>dom.window.close()};
@@ -177,4 +177,21 @@ test('clearing local reports requires explicit confirmation and preserves unrela
  c.shadowRoot.querySelector('.report-clear-cancel').click();assert.ok(f.dom.window.localStorage.getItem(key));
  c.shadowRoot.querySelector('.report-clear').click();c.shadowRoot.querySelector('.report-clear-confirm').click();assert.equal(f.dom.window.localStorage.getItem(key),null);assert.equal(c._savedReports.length,0);assert.equal(f.dom.window.localStorage.getItem('neighbor'),'keep');
  }finally{f.cleanup();}
+});
+
+const stableSource = {schema:1,source:'core_uuid_readonly',confirmed:true,instance:'c-'+'7'.repeat(32),owner:'c-'+'8'.repeat(32),scope:'c-'+'9'.repeat(32)};
+test('fresh verified backend source permits comparison of saved reports across browser reload',async()=>{
+ const first=await fixture('en',stableSource);let raw;
+ try{first.card.shadowRoot.querySelector('.report-save').click();raw=first.dom.window.localStorage.getItem(first.card._reportsKey());}finally{first.cleanup();}
+ const second=await fixture('en',stableSource);try{
+ const c=second.card;second.dom.window.localStorage.setItem(c._reportsKey(),raw);c._loadManualReports();const before=c._savedReports[0];c._updateReportControls();c.shadowRoot.querySelector('.report-save').click();c._reportBaseline=before.id;
+ assert.equal(c._selectedComparison().compatible,true);assert.doesNotMatch(reports.serialize(c._selectedReport(),{format:'json'}),/c-[a-f0-9]{32}|core_uuid_readonly/);
+ }finally{second.cleanup();}
+});
+test('a changed or unconfirmed backend source cannot make old saved reports comparable',async()=>{
+ const first=await fixture('en',stableSource);let raw;
+ try{first.card.shadowRoot.querySelector('.report-save').click();raw=first.dom.window.localStorage.getItem(first.card._reportsKey());}finally{first.cleanup();}
+ for(const source of [{...stableSource,instance:'c-'+'a'.repeat(32)},{...stableSource,owner:'c-'+'b'.repeat(32)},{...stableSource,confirmed:false},null]){
+ const f=await fixture('en',source);try{const c=f.card;f.dom.window.localStorage.setItem(c._reportsKey(),raw);c._loadManualReports();const old=c._savedReports[0];c._updateReportControls();c.shadowRoot.querySelector('.report-save').click();c._reportBaseline=old.id;assert.equal(c._selectedComparison().compatible,false);}finally{f.cleanup();}
+ }
 });
