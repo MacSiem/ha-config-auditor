@@ -2,6 +2,44 @@
 (function() {
 'use strict';
 
+// BEGIN HA TOOLS UI V3 source-sha256=029c06206e55abad9aa09dfcf65bb13027ec24ce6a0bfacc45a938891b27254e
+// HA Tools v3: vendored inside each consumer's own closure, never a window API.
+function createUiV3({ language = 'en' } = {}) {
+  const pl = String(language).startsWith('pl');
+  const states = {
+    success: ['Success', 'Sukces', '✓'],
+    partial: ['Partial', 'Częściowo', '½'],
+    unconfirmed: ['Unconfirmed', 'Niepotwierdzony', '?'],
+    error: ['Error', 'Błąd', '✕'],
+    not_checked: ['Not checked', 'Nie sprawdzono', '–'],
+    no_data: ['No data', 'Brak danych', '∅'],
+  };
+  const status = (value) => {
+    const code = typeof value === 'string' && Object.hasOwn(states, value) ? value : 'not_checked';
+    const row = states[code];
+    return { code, label: row[pl ? 1 : 0], icon: row[2], countsAsSuccess: code === 'success' };
+  };
+  const statusHtml = (value) => {
+    const result = status(value);
+    return `<span class="ht-result-state ht-result-state--${result.code}" data-result-state="${result.code}"><span aria-hidden="true">${result.icon}</span> ${result.label}</span>`;
+  };
+  const css = `
+.ht-result-state { display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid currentColor;border-radius:6px;font-size:12px;line-height:1.4;white-space:normal; }
+.ht-result-state--success { color:#237b3d;background:rgba(35,123,61,.10); }
+.ht-result-state--partial { color:#966400;background:rgba(150,100,0,.10); }
+.ht-result-state--unconfirmed { color:#ad5200;background:rgba(173,82,0,.10); }
+.ht-result-state--error { color:#c32b2b;background:rgba(195,43,43,.10); }
+.ht-result-state--not_checked,.ht-result-state--no_data { color:var(--secondary-text-color,#666);background:transparent; }
+.ht-result-state--no_data { border-style:dashed; }
+:host(.bento-dark) .ht-result-state--success { color:#81cf99; }
+:host(.bento-dark) .ht-result-state--partial { color:#efd080; }
+:host(.bento-dark) .ht-result-state--unconfirmed { color:#ffb97b; }
+:host(.bento-dark) .ht-result-state--error { color:#ff9999; }
+`;
+  return { status, statusHtml, css };
+}
+// END HA TOOLS UI V3
+
 // Component-local persistence retains this card's existing localStorage keys.
 const haToolsPersistence = { _cache: {}, _hass: null, setHass(h) { this._hass = h; }, async save(k, d) { try { localStorage.setItem('ha-config-auditor-' + k, JSON.stringify(d)); } catch(e) { console.debug('[ha-config-auditor] caught:', e); } }, async load(k) { try { const r = localStorage.getItem('ha-config-auditor-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } }, loadSync(k) { try { const r = localStorage.getItem('ha-config-auditor-' + k); return r ? JSON.parse(r) : null; } catch(e) { return null; } } };
 
@@ -665,6 +703,8 @@ const AUDIT_COPY_PL = {
   "Version comparison data is incomplete.": "Dane porównania wersji są niepełne.",
   "OS update available": "Dostępna aktualizacja systemu",
   "HA OS is up to date": "HA OS jest aktualny",
+  "HA OS update status not checked": "Nie sprawdzono aktualizacji HA OS",
+  "OS update metadata is incomplete or invalid.": "Dane aktualizacji HA OS są niepełne lub nieprawidłowe.",
   "{0} addon(s) have updates": "Dostępne aktualizacje dodatków: {0}",
   "Update addons via Settings → Add-ons": "Zaktualizuj dodatki przez Ustawienia → Dodatki",
   "All addons up to date": "Wszystkie dodatki są aktualne",
@@ -1141,12 +1181,16 @@ class HAConfigAuditor extends HTMLElement {
         }
       }
 
-      if (osInfo) {
-        if (osInfo.update_available) {
-          findings.warning.push({ id: 'os_update', title: 'OS update available', desc: `Current: ${osInfo.version} \u2192 Latest: ${osInfo.version_latest}`, fix: 'Update via Settings \u2192 System \u2192 Updates' });
-        } else if (osInfo.version) {
-          findings.pass.push({ id: 'os_update', title: 'HA OS is up to date', desc: `Version: ${osInfo.version}` });
-        }
+      const osVersion = osInfo?.version;
+      const validOsVersion = typeof osVersion === 'string' && /^\d+(?:\.[\da-z]+)+(?:[-+][\w.-]+)?$/i.test(osVersion);
+      const osUpdateAvailable = osInfo?.update_available;
+      if (validOsVersion && osUpdateAvailable === true) {
+        const latest = typeof osInfo.version_latest === 'string' ? osInfo.version_latest : this._msg('Not checked');
+        findings.warning.push({ id: 'os_update', title: 'OS update available', desc: `Current: ${osVersion} → Latest: ${latest}`, fix: 'Update via Settings → System → Updates' });
+      } else if (validOsVersion && osUpdateAvailable === false) {
+        findings.pass.push({ id: 'os_update', resultState: 'success', title: 'HA OS is up to date', desc: `Version: ${osVersion}` });
+      } else {
+        findings.info.push({ id: 'os_update', resultState: 'not_checked', verified: false, title: 'HA OS update status not checked', desc: 'OS update metadata is incomplete or invalid.' });
       }
 
       let addons = [];
@@ -1600,7 +1644,7 @@ class HAConfigAuditor extends HTMLElement {
       return;
     }
     const html = `
-      <style>${HA_CONFIG_AUDITOR_BENTO_CSS}
+      <style>${HA_CONFIG_AUDITOR_BENTO_CSS}${createUiV3({ language: this._lang }).css}
 /* === HA Tools split — premium banners (donate / intro / prereq) === */
 
 /* Donation footer — diamond top */
@@ -2340,7 +2384,9 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   _renderFinding(f, severity) {
     const icons = { critical: '\u{1F6A8}', warning: '\u26A0\uFE0F', info: '\u2139\uFE0F', pass: '\u2705' };
     const labels = { critical: 'Failed', warning: 'Warning', info: 'Info', pass: 'Pass' };
-    return `<div class="finding ${severity}"><div class="finding-header"><span class="finding-icon">${icons[severity]}</span><span class="finding-title" data-audit-value>${_esc(this._msg(f.skipped ? f.title.replace(/ \(not checked\)$/, '') : f.title))}${f.skipped ? ' (' + this._msg('Not checked').toLowerCase() + ')' : ''}</span><span class="finding-badge badge-${severity}">${labels[severity]}</span>${f.verified ? '<span class="finding-badge badge-verified" title="Checked by the Config Auditor integration on the Home Assistant server">Server-verified</span>' : ''}</div><div class="finding-desc" data-audit-value>${_esc(this._msg(f.desc))}</div>${f.fix ? `<div class="finding-fix" data-audit-value>\u{1F4A1} ${_esc(this._msg(f.fix))}</div>` : ''}</div>`;
+    const resultState = f.resultState || (f.skipped ? 'not_checked' : severity === 'pass' ? 'success' : null);
+    const resultBadge = resultState ? createUiV3({ language: this._lang }).statusHtml(resultState) : `<span class="finding-badge badge-${severity}">${labels[severity]}</span>`;
+    return `<div class="finding ${severity}"><div class="finding-header"><span class="finding-icon">${icons[severity]}</span><span class="finding-title" data-audit-value>${_esc(this._msg(f.skipped ? f.title.replace(/ \(not checked\)$/, '') : f.title))}${f.skipped ? ' (' + this._msg('Not checked').toLowerCase() + ')' : ''}</span>${resultBadge}${f.verified ? '<span class="finding-badge badge-verified" title="Checked by the Config Auditor integration on the Home Assistant server">Server-verified</span>' : ''}</div><div class="finding-desc" data-audit-value>${_esc(this._msg(f.desc))}</div>${f.fix ? `<div class="finding-fix" data-audit-value>\u{1F4A1} ${_esc(this._msg(f.fix))}</div>` : ''}</div>`;
   }
 
   _renderAddonsAndIntegrations(d) {
