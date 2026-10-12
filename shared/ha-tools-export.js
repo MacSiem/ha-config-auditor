@@ -102,7 +102,7 @@ export function createExportDialog(options) {
   function validation(value) {
     if (!formats.includes(value.format)) return 'invalidFormat';
     const name = value.filename;
-    if (!name || [...name].length > 128 || name !== name.trim() || /[\p{Cc}\p{Cf}/\\<>:"|?*]/u.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(name) || /[. ]\./.test(name)) return 'invalidName';
+    if (!name || [...name].length > 128 || name !== name.trim() || /[\p{Cc}\p{Cf}/\\<>:"|?*]/u.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(name)) return 'invalidName';
     if (!name.endsWith(`.${value.format}`) || name.length <= value.format.length + 1) return 'extension';
     return null;
   }

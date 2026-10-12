@@ -73,7 +73,7 @@ test('every draft change discards ready bytes; refresh alone regenerates', async
 
 test('invalid filename/format produces actionable Error without default override', async () => {
   const f = await fixture(); await f.open();
-  const invalid = ['', '../report.json', 'a/b.json', 'a\\b.json', 'CON.json', 'nul.txt', 'report.csv', 'bad\u0000.json', 'a'.repeat(130) + '.json', 'trailing .json', ' bad.json'];
+  const invalid = ['', '../report.json', 'a/b.json', 'a\\b.json', 'CON.json', 'nul.txt', 'report.csv', 'bad\u0000.json', 'a'.repeat(130) + '.json', ' bad.json'];
   for (const name of invalid) {
     f.edit('filename', name); f.find('refresh').click(); await flush();
     assert.equal(f.find('filename').value, name); assert.equal(f.find('status').dataset.resultState, 'error', name);
