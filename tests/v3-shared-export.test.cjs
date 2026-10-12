@@ -17,7 +17,7 @@ async function fixture(options = {}) {
   const timers = new Map(), builds = [], downloads = [];
   const policy = { id: 'synthetic-count-report-v1', allowlistedFields: ['count', 'missing', 'label', 'status', 'scope', 'sourceLimit'], neverInclude: ['tokens', 'users', 'addresses', 'raw_config'] };
   const payload = (draft, extra = {}) => ({ serialized: draft.format === 'json' ? '{"count":0,"missing":null,"label":"Zażółć <script>bad()</script>"}\n' : 'count,missing,label\n0,,Zażółć\n', confirmed: true, sourceConfirmed: true, status: 'success', included: ['Count, missing marker, synthetic label'], excluded: ['Tokens, users, addresses, raw configuration'], sourceLimit: 'Synthetic selected rows only', ...extra });
-  const controller = createExportDialog({ root, getContext: () => context, getLanguage: () => language, createUiV3, policy, formats: ['json', 'csv', 'txt'], defaultFormat: 'json', defaultFilename: 'report.json', clock: () => now, setTimer: (fn, ms) => { const id = Symbol(); timers.set(id, { fn, ms }); return id; }, clearTimer: id => timers.delete(id), buildPayload: args => { builds.push(args); return options.build ? options.build(args, payload) : Promise.resolve(payload(args.draft)); }, performDownload: args => { downloads.push(args); return options.download ? options.download(args) : Promise.resolve({ outcome: 'initiated' }); } });
+  const controller = createExportDialog({ root, getContext: () => context, getLanguage: () => language, createUiV3, policy, formats: options.formats || ['json', 'csv', 'txt'], defaultFormat: 'json', defaultFilename: 'report.json', clock: () => now, setTimer: (fn, ms) => { const id = Symbol(); timers.set(id, { fn, ms }); return id; }, clearTimer: id => timers.delete(id), buildPayload: args => { builds.push(args); return options.build ? options.build(args, payload) : Promise.resolve(payload(args.draft)); }, performDownload: args => { downloads.push(args); return options.download ? options.download(args) : Promise.resolve({ outcome: 'initiated' }); } });
   const find = key => root.querySelector('[data-ha-tools-export]')?.shadowRoot.querySelector(`[data-export="${key}"]`);
   const focused = () => root.querySelector('[data-ha-tools-export]')?.shadowRoot.activeElement || doc.activeElement;
   const open = async () => { doc.getElementById('opener').focus(); controller.open({ opener: doc.activeElement }); await flush(); };
@@ -73,7 +73,7 @@ test('every draft change discards ready bytes; refresh alone regenerates', async
 
 test('invalid filename/format produces actionable Error without default override', async () => {
   const f = await fixture(); await f.open();
-  const invalid = ['', '../report.json', 'a/b.json', 'a\\b.json', 'CON.json', 'nul.txt', 'report.csv', 'bad\u0000.json', 'a'.repeat(130) + '.json', 'x..json', 'trailing .json', ' bad.json'];
+  const invalid = ['', '../report.json', 'a/b.json', 'a\\b.json', 'CON.json', 'nul.txt', 'report.csv', 'bad\u0000.json', 'a'.repeat(130) + '.json', 'trailing .json', ' bad.json'];
   for (const name of invalid) {
     f.edit('filename', name); f.find('refresh').click(); await flush();
     assert.equal(f.find('filename').value, name); assert.equal(f.find('status').dataset.resultState, 'error', name);
@@ -232,4 +232,19 @@ test('pure factory requires explicit consumer allowlist and existing W4 helper',
   const common = { root, getContext: () => ({}), getLanguage: () => 'en', buildPayload: () => ({}), performDownload: () => ({}) };
   assert.throws(() => createExportDialog(common), /policy|createUiV3/);
   assert.equal(root.children.length, 0); dom.window.close();
+});
+
+// Existing Data Exporter offers YAML: shared presentation must preserve it.
+test('explicit YAML consumer preserves its existing format and exact bytes', async () => {
+  const f = await fixture({ formats: ['json', 'yaml'], build: () => ({serialized: 'count: 0\nmissing: null\n', confirmed:true, sourceConfirmed:true, status:'success',included:['Count'],excluded:['Private fields'],sourceLimit:'Synthetic known fields'}) });
+  await f.open();f.edit('format','yaml');f.edit('filename','report.yaml');f.find('refresh').click();await flush();
+  assert.equal(f.find('save').disabled,false);f.find('save').click();await flush();
+  assert.equal(f.downloads[0].format,'yaml');assert.equal(f.downloads[0].blob.type,'application/yaml;charset=utf-8');
+  assert.equal(await f.downloads[0].blob.text(),'count: 0\nmissing: null\n');f.cleanup();
+});
+
+test('valid basename can contain repeated dots without being a path', async () => {
+  const f = await fixture();await f.open();f.edit('filename','report..2026.json');f.find('refresh').click();await flush();
+  assert.equal(f.find('save').disabled,false);f.find('save').click();await flush();
+  assert.equal(f.downloads[0].filename,'report..2026.json');f.cleanup();
 });
