@@ -346,7 +346,7 @@ function createExportDialog(options) {
 }
 // END HA TOOLS EXPORT V3
 
-// BEGIN HA CONFIG REPORTS V1 source-sha256=8b46ed465fbba193468fe8531266c7526d93e6a3b3fcba4be426a417323e7b00
+// BEGIN HA CONFIG REPORTS V1 source-sha256=cef4c824ffdaaf9b07ea229ad2161061a56cf58cc2c943d83d5518324a4c6f4e
 // Config Auditor reviewed report schema. No arbitrary raw-object export/redaction.
 function createAuditReports() {
   const schema = 1, method = 'config-findings-v1', maxReports = 20, maxAge = 30 * 86400000;
@@ -359,8 +359,8 @@ function createAuditReports() {
     network: ['ssl_external','ssl_internal','ssl_cert_managed','ssl_cert_check','camera_exposure','cors_config'],
     inventory: ['user_count','multi_owner','local_only_users','automation_count','camera_count','media_exposure','person_tracking','host_chassis'],
     configuration: ['shell_commands','webhooks','hacs_custom_repos','recorder_retention','unencrypted_backups','mqtt_anonymous','template_sensors'],
-    authentication: ['access_tokens','server_auth_legacy_api_password','server_auth_admin_mfa'],
-    server: ['server_http_ip_ban','server_http_trusted_proxies','server_yaml_plaintext_secrets'],
+    authentication: ['access_tokens','server_auth_providers','server_auth_legacy_api_password','server_auth_trusted_networks','server_auth_admin_mfa'],
+    server: ['server_http_transport','server_http_ip_ban','server_http_trusted_proxies','server_yaml_plaintext_secrets'],
   };
   const catalog = Object.entries(groups).flatMap(([category, ids]) => ids.map(id => Object.freeze({id,category})));
   const identities = new Map(catalog.map(c => [c.id,c]));
@@ -1457,7 +1457,8 @@ class HAConfigAuditor extends HTMLElement {
     } catch { this._reportNotice = 'storage_error'; }
     this._reportClearArmed = false;
     this._updateReportControls();
-    this.shadowRoot.querySelector('.report-clear')?.focus();
+    const clear = this.shadowRoot.querySelector('.report-clear');
+    (clear && !clear.disabled ? clear : this.shadowRoot.querySelector('.report-save'))?.focus();
   }
 
   _invalidateReportContext() {

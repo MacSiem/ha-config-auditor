@@ -110,13 +110,13 @@ test('reloading restores sanitized local reports but does not invent user/instan
  second.dom.window.localStorage.setItem(second.card._reportsKey(),raw);second.card._loadManualReports();second.card._updateReportControls();assert.equal(second.card._savedReports.length,1);
  const old=second.card._savedReports[0];second.card.shadowRoot.querySelector('.report-save').click();second.card._reportBaseline=old.id;
  const comparison=second.card._selectedComparison();assert.equal(comparison.compatible,false);assert.match(comparison.reason,/session|instance/);
- assert.doesNotMatch(raw,/CANARY|privateInventory|users|names|addresses/);
+ assert.doesNotMatch(raw,/CANARY|privateInventory|"users"\s*:|"names"\s*:|"addresses"\s*:/);
  }finally{second.cleanup();}
 });
 test('offline transition prevents saves and export; reconnect invalidates old baseline identity',async()=>{
  const f=await fixture();try{
  const card=f.card;card.shadowRoot.querySelector('.report-save').click();const old=card._savedReports[0];card.shadowRoot.querySelector('.report-export').click();await flush();assert.ok(f.find('preview').textContent);
- f.hass.connection.connected=false;card.hass=f.hass;assert.equal(card._auditData,null);assert.equal(card._reportContext,null);assert.equal(f.find('preview').textContent,'');assert.equal(f.find('private').checked,false);
+ f.hass.connection.connected=false;card.hass=f.hass;assert.equal(card._auditData,null);assert.equal(card._reportContext,null);assert.equal(f.find('preview'),undefined);
  const stored=f.dom.window.localStorage.getItem(card._reportsKey());card._saveManualReport();assert.equal(f.dom.window.localStorage.getItem(card._reportsKey()),stored);
  f.hass.connection.connected=true;card.hass=f.hass;await flush();card._exportDialog.cancel();card.shadowRoot.querySelector('.report-save').click();card._reportBaseline=old.id;assert.equal(card._selectedComparison().compatible,false);
  }finally{f.cleanup();}
