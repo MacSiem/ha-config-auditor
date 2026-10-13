@@ -681,7 +681,7 @@ const HA_CONFIG_AUDITOR_BENTO_CSS = `
   border-radius: var(--bento-radius-pill) !important;
   margin-bottom: 0 !important;
   transition: all var(--bento-trans) !important;
-  white-space: nowrap !important; flex: 1 1 auto !important; text-align: center !important; min-height: 40px !important;
+  white-space: normal !important; flex: 1 1 auto !important; text-align: center !important; min-height: 44px !important;
   letter-spacing: -0.005em !important;
 }
 .tab:hover, .tab-btn:hover, .tab-button:hover, .dtab:hover {
@@ -1007,7 +1007,7 @@ const _LOCAL_INTRO_PL = {
   steps: ['Przegląd pokazuje liczbę pozytywnych wyników, ostrzeżeń i problemów.', 'W zakładce Wyniki przeczytaj każdy wynik i wskazówkę jego poprawy.', 'Zakładka Wskazówki zawiera listę dobrych praktyk.']
 };
 const _LOCAL_SUPPORT_KEY = 'ha-config-auditor-support-dismissed';
-const _LOCAL_DONATE_HTML = '<div class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">Optional support for HA Tools</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;padding:2px 6px;min-height:0;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></div>';
+const _LOCAL_DONATE_HTML = '<div class="donate-section" data-source="own-card" style="margin:8px 0 0;padding:4px 0;background:none;border:0;box-shadow:none;min-height:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-direction:row;justify-content:flex-start;text-align:left"><a href="https://buymeacoffee.com/macsiem" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:var(--secondary-text-color,#64748b);font-weight:400;text-decoration:underline">Optional support for HA Tools</a><button type="button" class="support-dismiss" aria-label="Dismiss support link" style="margin-left:auto;padding:2px 6px;min-height:44px;min-width:44px;line-height:1;border:0;background:none;color:var(--secondary-text-color,#64748b);cursor:pointer">×</button></div>';
 function _renderLocalSupport(language) {
   return language === 'pl' ? _LOCAL_DONATE_HTML
     .replace('Optional support for HA Tools', 'Dobrowolne wsparcie HA Tools')
@@ -1368,6 +1368,113 @@ const AUDIT_COPY_PATTERNS = Object.entries(AUDIT_COPY_PL).filter(([key]) => key.
   const pattern = parts.map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("([\\s\\S]*?)");
   return [new RegExp("^" + pattern + "$"), value];
 });
+
+
+// Card-local presentation only: current navigation is the sole source of picker options.
+function _rememberTabFocus(card) {
+  const active = card.shadowRoot?.activeElement;
+  if (active?.id === 'ha-tools-tab-picker') return { picker: true };
+  if (active?.closest('.tabs') && active.dataset.tab) return { tab: active.dataset.tab };
+  return null;
+}
+function _bindResponsiveTabs(card, restoreFocus = null) {
+  const root = card.shadowRoot;
+  const nav = root?.querySelector('.tabs');
+  if (!nav) { card._tabResizeObserver?.disconnect(); card._tabResizeObserver = null; card.removeAttribute('data-responsive-tabs-observed'); return; }
+  let label = root.querySelector('.ht-tab-picker');
+  if (!label) {
+    label = card.ownerDocument.createElement('div');
+    label.className = 'ht-tab-picker';
+    const text = card.ownerDocument.createElement('label'); text.htmlFor = 'ha-tools-tab-picker'; label.append(text);
+    const select = card.ownerDocument.createElement('select');
+    select.id = 'ha-tools-tab-picker'; label.append(select); nav.before(label);
+    select.addEventListener('change', () => {
+      const currentNav = root.querySelector('.tabs');
+      const button = Array.from(currentNav?.querySelectorAll('button[data-tab]') || [])
+        .find(item => item.dataset.tab === select.value && !item.disabled && !item.hidden);
+      // Reuse the exact existing navigation/action path, including its guards.
+      if (button) button.click();
+      _bindResponsiveTabs(card);
+    });
+  }
+  label.firstElementChild.textContent = card._lang === 'pl' ? 'Zakładka' : 'Tab';
+  const select = label.querySelector('select');
+  const buttons = Array.from(nav.querySelectorAll('button[data-tab]')).filter(button => !button.hidden && !button.disabled);
+  const options = Array.from(select.options);
+  if (options.length !== buttons.length || buttons.some((button, index) => options[index]?.value !== button.dataset.tab)) {
+    select.replaceChildren(...buttons.map(button => {
+      const option = card.ownerDocument.createElement('option'); option.value = button.dataset.tab; return option;
+    }));
+  }
+  buttons.forEach((button, index) => { select.options[index].textContent = button.getAttribute('aria-label') || button.textContent.trim(); });
+  const selected = buttons.find(button => button.classList.contains('active'));
+  select.value = selected?.dataset.tab || '';
+  const applyWidth = width => {
+    const currentNav = root.querySelector('.tabs'), currentLabel = root.querySelector('.ht-tab-picker');
+    if (!currentNav || !currentLabel) return;
+    const input = currentLabel.querySelector('select');
+    const active = root.activeElement;
+    const narrow = width < 280;
+    const fromTab = currentNav.contains(active), fromPicker = active === input;
+    currentNav.hidden = narrow; currentLabel.hidden = !narrow;
+    if (narrow && fromTab) input.focus({ preventScroll: true });
+    else if (!narrow && fromPicker) currentNav.querySelector('button.active')?.focus({ preventScroll: true });
+  };
+  if (card._tabContainerWidth == null) {
+    const style = getComputedStyle(card);
+    card._tabContainerWidth = card.getBoundingClientRect().width
+      - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)
+      - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
+  }
+  // Zero-width detached/test hosts default to tabs until an actual size arrives.
+  applyWidth(card._tabContainerWidth > 0 ? card._tabContainerWidth : 900);
+  if (typeof ResizeObserver !== 'function') { nav.hidden = false; label.hidden = false; }
+  if (!card._tabResizeObserver && typeof ResizeObserver === 'function' && card.isConnected) {
+    // While observed, JS toggles visibility after capturing focus. This avoids
+    // CSS hiding the focused control before ResizeObserver can transfer it.
+    card.setAttribute('data-responsive-tabs-observed', '');
+    card._tabResizeObserver = new ResizeObserver(entries => {
+      const entry = entries.find(item => item.target === card);
+      if (!entry) return;
+      card._tabContainerWidth = entry.contentRect.width;
+      applyWidth(card._tabContainerWidth);
+    });
+    card._tabResizeObserver.observe(card);
+  }
+  if (restoreFocus) {
+    const button = buttons.find(item => item.dataset.tab === restoreFocus.tab) || selected;
+    if (nav.hidden || restoreFocus.picker && !label.hidden) select.focus({ preventScroll: true });
+    else button?.focus({ preventScroll: true });
+  }
+}
+const _RESPONSIVE_CONTROL_CSS = `
+/* Host width, including Sections/sidebar placement, determines navigation. */
+:host { container-type:inline-size;container-name:ha-tools-card;min-width:0; }
+.card { min-width:0;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere; }
+button,summary,a[href],input:not([type=checkbox]):not([type=radio]),select,textarea {
+  box-sizing:border-box;min-height:44px !important;min-width:44px !important;max-width:100%;
+}
+button,summary,a[href] { white-space:normal;overflow-wrap:anywhere; }
+a[href] { display:inline-flex;align-items:center; }
+input:not([type=checkbox]):not([type=radio]),select,textarea { min-width:44px !important; }
+button:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible {
+  outline:3px solid var(--primary-color,#1769aa) !important;outline-offset:2px;
+}
+.tabs { flex-wrap:wrap !important;overflow:visible !important;min-width:0;max-width:100%; }
+.tabs button[data-tab] { min-width:44px !important;min-height:44px !important;white-space:normal !important;overflow-wrap:anywhere;max-width:100%; }
+.ht-tab-picker { display:none;min-width:0;gap:6px;margin:0 0 16px; }
+.ht-tab-picker select { width:100%;font:inherit;color:var(--primary-text-color,inherit);background:var(--card-background-color,transparent);padding:8px;border:1px solid var(--divider-color,#aaa);border-radius:8px; }
+.tabs[hidden],.ht-tab-picker[hidden] { display:none !important; }
+.donate-section[data-source="own-card"] a { min-height:44px;min-width:44px; }
+.intro-banner,.tip-banner { padding-right:64px !important; }
+@container ha-tools-card (width < 280px) {
+  .tabs { display:none !important; }
+  .ht-tab-picker:not([hidden]) { display:flex;flex-direction:column; }
+}
+/* Observed hosts retain their focused navigation until the width callback. */
+:host([data-responsive-tabs-observed]) .tabs:not([hidden]) { display:flex !important; }
+:host([data-responsive-tabs-observed]) .ht-tab-picker:not([hidden]) { display:flex;flex-direction:column; }
+`;
 
 class HAConfigAuditor extends HTMLElement {
   static getConfigElement() { return document.createElement('ha-config-auditor-editor'); }
@@ -1794,6 +1901,7 @@ class HAConfigAuditor extends HTMLElement {
     this._updateReportControls();
     const labels = { overview: 'Overview', critical: 'Findings', addons: 'Addons & Integrations', network: 'Network', users: 'Users', tips: 'Tips' };
     this.shadowRoot.querySelectorAll('[role="tab"]').forEach(tab => { tab.textContent = this._msg(labels[tab.dataset.tab]); });
+    _bindResponsiveTabs(this);
     const refresh = this.shadowRoot.querySelector('.audit-refresh');
     if (refresh) refresh.textContent = this._t.refresh;
     const intro = this._lang === 'pl' ? _LOCAL_INTRO_PL : _LOCAL_INTRO;
@@ -2373,7 +2481,9 @@ class HAConfigAuditor extends HTMLElement {
   }
 
   _render() {
+    const tabFocus = _rememberTabFocus(this);
     if (this._hass?.user?.is_admin !== true) {
+      this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this.removeAttribute('data-responsive-tabs-observed');
       const html = `<style>${HA_CONFIG_AUDITOR_BENTO_CSS}</style><div class="card" role="status">${_esc(this._t.adminRequired)}</div>`;
       this._lastHtml = html;
       this._exportDialog?.cancel();
@@ -3028,6 +3138,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 .report-tools th,.report-tools td { padding:8px;text-align:start;vertical-align:top; }
 .report-tools :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
 @container (max-width:499px) { .report-tools table,.report-tools tbody,.report-tools tr,.report-tools td { display:block;width:100%; } .report-tools thead { display:none; } .report-tools tr { margin:8px 0;border:1px solid var(--bento-border);border-radius:8px; } .report-tools td::before { content:attr(data-label) ': ';font-weight:600; } }
+${_RESPONSIVE_CONTROL_CSS}
 </style>
         ${_renderLocalIntro(this._lang)}
         <div class="card">
@@ -3069,9 +3180,11 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
         this._activeTab = btn.dataset.tab;
         history.replaceState(null, '', location.pathname + '#' + this._toolId + '/' + this._activeTab);
         this._updateContent();
+        _bindResponsiveTabs(this);
       });
     });
 
+    _bindResponsiveTabs(this, tabFocus);
     this.shadowRoot.querySelector('.audit-refresh').addEventListener('click', () => {
       if (this._loading) return;
       this._lastAuditTime = Date.now();
@@ -3371,6 +3484,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
   }
 
   disconnectedCallback() {
+    this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this._tabContainerWidth = null; this.removeAttribute('data-responsive-tabs-observed');
     this._reportBrowserOff?.();
     this._reportBrowserOff = null;
     this._reportSourceEpoch = (this._reportSourceEpoch || 0) + 1;
@@ -3423,12 +3537,13 @@ class HaConfigAuditorEditor extends HTMLElement {
       <style>
             :host { display:block; padding:16px; }
             h3 { margin:0 0 16px; font-size:15px; font-weight:600; color:var(--bento-text, var(--primary-text-color,#1e293b)); }
-            input { outline:none; transition:border-color .2s; }
+            input { box-sizing:border-box;min-height:44px;min-width:44px;max-width:100%;transition:border-color .2s; }
+            input:focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
             input:focus { border-color:var(--bento-primary, var(--primary-color,#3b82f6)); }
         </style>
       <h3>Config Auditor</h3>
             <div style="margin-bottom:12px;">
-              <label style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;">Title</label>
+              <label for="cf_title" style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;">Title</label>
               <input type="text" id="cf_title" value="${_esc(this._config?.title || 'Config Auditor')}"
                 style="width:100%;padding:8px 12px;border:1px solid var(--divider-color,#e2e8f0);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#1e293b);font-size:14px;box-sizing:border-box;">
             </div>
