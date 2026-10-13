@@ -3696,6 +3696,13 @@ class HaConfigAuditorEditor extends HTMLElement {
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this._config }, bubbles: true, composed: true }));
   }
   _render() {
+    const title = this.shadowRoot.querySelector('#cf_title');
+    const value = String(this._config.title ?? 'Config Auditor');
+    if (title) {
+      // Keep the input and its selection when HA echoes config-changed.
+      if (title.value !== value) title.value = value;
+      return;
+    }
     this.shadowRoot.innerHTML = `
       <style>
             :host { display:block; padding:16px; }
@@ -3707,7 +3714,7 @@ class HaConfigAuditorEditor extends HTMLElement {
       <h3>Config Auditor</h3>
             <div style="margin-bottom:12px;">
               <label for="cf_title" style="display:block;font-weight:500;margin-bottom:4px;font-size:13px;">Title</label>
-              <input type="text" id="cf_title" value="${_esc(this._config?.title || 'Config Auditor')}"
+              <input type="text" id="cf_title" value="${_esc(value)}"
                 style="width:100%;padding:8px 12px;border:1px solid var(--divider-color,#e2e8f0);border-radius:8px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#1e293b);font-size:14px;box-sizing:border-box;">
             </div>
     `;
