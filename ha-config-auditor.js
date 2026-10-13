@@ -1370,6 +1370,162 @@ const AUDIT_COPY_PATTERNS = Object.entries(AUDIT_COPY_PL).filter(([key]) => key.
 });
 
 
+// W3 reuses Device Health's original-node movement and Data Exporter's name/state
+// plus labelled fields. Inventory reads, source guards and report state stay owned
+// by their existing paths. A content-width change only changes presentation.
+function _disconnectConfigInventory(card) {
+  card._inventoryObserver?.disconnect();
+  card._inventoryObserver = null;
+}
+function _rememberConfigInventory(card) {
+  const active = card.shadowRoot?.activeElement;
+  let focus = null;
+  for (const mount of card._inventoryMounts || []) {
+    for (const item of mount.items) {
+      item.open = item.detail.open;
+      if (item.row.contains(active) || item.detail.contains(active)) {
+        focus = { key: item.key, node: active, id: active.id,
+          selection: typeof active.selectionStart === 'number'
+            ? [active.selectionStart, active.selectionEnd, active.selectionDirection] : null };
+      }
+    }
+  }
+  return focus;
+}
+function _focusConfigInventory(card, focus) {
+  if (!focus) return;
+  for (const mount of card._inventoryMounts || []) {
+    const item = mount.items.find(item => item.key === focus.key);
+    if (!item) continue;
+    const original = focus.node;
+    let target = original && (item.row.contains(original) || item.detail.contains(original)) ? original : null;
+    if (!target && focus.id) target = card.shadowRoot.getElementById(focus.id);
+    if (!target || target === item.row || target === item.summary) target = mount.narrow ? item.summary : item.row;
+    if (mount.narrow && target !== item.summary) { item.detail.open = true; item.open = true; }
+    if (target === item.row) target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    if (focus.selection && typeof target.setSelectionRange === 'function') target.setSelectionRange(...focus.selection);
+    return;
+  }
+}
+function _bindConfigInventory(card, restoreFocus = null) {
+  const root = card.shadowRoot, content = root?.getElementById('content');
+  _disconnectConfigInventory(card);
+  const previous = card._inventoryMounts || [];
+  const tables = Array.from(content?.querySelectorAll('table[data-config-inventory]') || []);
+  const doc = card.ownerDocument;
+  card._inventoryMounts = tables.map(table => {
+    const kind = table.dataset.configInventory;
+    let mount = previous.find(item => item.kind === kind);
+    const incomingWide = table.parentElement;
+    if (!mount) {
+      const layout = doc.createElement('div'); layout.className = 'ht-config-layout';
+      const list = doc.createElement('div'); list.className = 'ht-config-records'; list.dataset.inventory = kind; list.hidden = true;
+      incomingWide.before(layout); layout.append(incomingWide, list);
+      mount = {kind, layout, list, wide:incomingWide, table, items:[], narrow:false};
+    }
+    const headers = Array.from(table.tHead.rows[0].cells, cell => cell.textContent.trim());
+    const oldItems = mount.items, occurrences = new Map();
+    const incomingRows = Array.from(table.tBodies[0].rows);
+    mount.items = incomingRows.map(row => {
+      const identity = row.dataset.inventoryKey || '';
+      const ordinal = occurrences.get(identity) || 0; occurrences.set(identity, ordinal + 1);
+      const key = JSON.stringify([kind, identity, ordinal]);
+      let item = oldItems.find(item => item.key === key);
+      if (!item) {
+        const detail = doc.createElement('details'); detail.dataset.inventoryRecord = key;
+        const summary = doc.createElement('summary');
+        const name = doc.createElement('strong'), state = doc.createElement('span'); state.dataset.recordState = '';
+        summary.append(name, state);
+        if (kind === 'users') { const role = doc.createElement('span'); role.dataset.recordRole = ''; summary.append(role); }
+        const fields = doc.createElement('dl'); fields.className = 'record-fields'; detail.append(summary, fields);
+        item = {key, row, detail, summary, fields, cells:[], open:false};
+      }
+      const incomingCells = Array.from(row.cells);
+      item.summary.firstElementChild.textContent = incomingCells[0].textContent;
+      item.summary.querySelector('[data-record-state]').textContent = incomingCells[kind === 'integrations' || kind === 'ports' ? 3 : 2].textContent.trim();
+      if (kind === 'users') item.summary.querySelector('[data-record-role]').textContent = incomingCells[1].textContent;
+      item.cells = incomingCells.map((cell, index) => {
+        const html = cell.innerHTML;
+        let field = item.cells[index];
+        if (!field) {
+          const label = doc.createElement('dt'), value = doc.createElement('dd');
+          // Prevent later UI-label translation from altering raw inventory values.
+          value.dataset.auditValue = '';
+          item.fields.append(label, value);
+          field = {cell, label, value, nodes:Array.from(cell.childNodes), html};
+        } else if (field.html !== html) {
+          field.cell.replaceChildren(); field.value.replaceChildren();
+          field.nodes = Array.from(cell.childNodes); field.html = html;
+        }
+        // Newly arriving rows must enter the current representation immediately.
+        (mount.narrow ? field.value : field.cell).append(...field.nodes);
+        field.label.textContent = headers[index];
+        field.cell.style.cssText = cell.style.cssText;
+        field.value.style.cssText = cell.style.cssText;
+        return field;
+      });
+      item.detail.open = item.open;
+      return item;
+    });
+    // On repaint keep original record/value nodes and their handlers. Only cells
+    // whose rendered value changed (e.g. a localized state) receive new contents.
+    if (mount.table !== table) {
+      mount.table.tHead.replaceWith(table.tHead);
+      mount.table.tBodies[0].replaceChildren(...mount.items.map(item => item.row));
+      incomingWide.replaceWith(mount.layout);
+    }
+    mount.list.replaceChildren(...mount.items.map(item => item.detail));
+    return mount;
+  });
+  if (!tables.length) return;
+  const mounts = card._inventoryMounts;
+  const applyWidth = width => {
+    if (!Number.isFinite(width) || width <= 0) return;
+    for (const mount of mounts) {
+      const narrow = width < 500;
+      if (narrow === mount.narrow) continue;
+      const focused = _rememberConfigInventory(card);
+      // Reveal before moving focused original nodes; only one representation owns them.
+      if (narrow) mount.list.hidden = false; else mount.wide.hidden = false;
+      mount.items.forEach(item => item.cells.forEach(({cell,value,nodes}) => (narrow ? value : cell).append(...nodes)));
+      mount.narrow = narrow;
+      if (focused && mount.items.some(item => item.key === focused.key)) _focusConfigInventory(card, focused);
+      mount.wide.hidden = narrow; mount.list.hidden = !narrow;
+    }
+  };
+  if (typeof ResizeObserver === 'function' && card.isConnected) {
+    const style = getComputedStyle(content);
+    const measured = content.getBoundingClientRect().width
+      - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)
+      - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
+    if (measured > 0) card._inventoryWidth = measured;
+    const observer = new ResizeObserver(entries => {
+      if (!card.isConnected || card._inventoryObserver !== observer || card._inventoryMounts !== mounts || root.getElementById('content') !== content) return;
+      const entry = entries.find(item => item.target === content);
+      const width = entry?.contentRect.width;
+      if (!Number.isFinite(width) || width <= 0) return;
+      card._inventoryWidth = width; applyWidth(width);
+    });
+    card._inventoryObserver = observer; observer.observe(content);
+  }
+  applyWidth(typeof ResizeObserver === 'function' ? card._inventoryWidth || 900 : 900);
+  _focusConfigInventory(card, restoreFocus);
+}
+const _CONFIG_INVENTORY_CSS = `
+#content,.ht-config-layout {min-width:0;max-width:100%;}
+.ht-config-layout [hidden] {display:none !important;}
+.ht-config-records > details {min-width:0;max-width:100%;border-bottom:1px solid var(--bento-border);padding:8px 0;}
+.ht-config-records summary {cursor:pointer;min-height:44px;box-sizing:border-box;padding:8px;white-space:normal;overflow-wrap:anywhere;}
+.ht-config-records summary strong,.ht-config-records summary > span {display:block;min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.ht-config-records summary > span {margin-top:4px;}
+.ht-config-records .record-fields {display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin:8px;}
+.ht-config-records dt {font-size:12px;color:var(--bento-text-secondary);margin-top:8px;}
+.ht-config-records dd {margin:0;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;}
+.ht-config-records code {white-space:normal;overflow-wrap:anywhere;box-decoration-break:clone;}
+.ht-config-layout tr:focus-visible {outline:3px solid var(--primary-color,#1769aa);outline-offset:-3px;}
+`;
+
 // Card-local presentation only: current navigation is the sole source of picker options.
 function _rememberTabFocus(card) {
   const active = card.shadowRoot?.activeElement;
@@ -2482,7 +2638,9 @@ class HAConfigAuditor extends HTMLElement {
 
   _render() {
     const tabFocus = _rememberTabFocus(this);
+    const inventoryFocus = _rememberConfigInventory(this);
     if (this._hass?.user?.is_admin !== true) {
+      _disconnectConfigInventory(this); this._inventoryMounts = []; this._inventoryWidth = null;
       this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this.removeAttribute('data-responsive-tabs-observed');
       const html = `<style>${HA_CONFIG_AUDITOR_BENTO_CSS}</style><div class="card" role="status">${_esc(this._t.adminRequired)}</div>`;
       this._lastHtml = html;
@@ -3138,7 +3296,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 .report-tools th,.report-tools td { padding:8px;text-align:start;vertical-align:top; }
 .report-tools :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
 @container (max-width:499px) { .report-tools table,.report-tools tbody,.report-tools tr,.report-tools td { display:block;width:100%; } .report-tools thead { display:none; } .report-tools tr { margin:8px 0;border:1px solid var(--bento-border);border-radius:8px; } .report-tools td::before { content:attr(data-label) ': ';font-weight:600; } }
-${_RESPONSIVE_CONTROL_CSS}
+${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
 </style>
         ${_renderLocalIntro(this._lang)}
         <div class="card">
@@ -3163,6 +3321,7 @@ ${_RESPONSIVE_CONTROL_CSS}
     if (this._lastHtml === html) return;
     this._lastHtml = html;
     this._exportDialog?.cancel();
+    _disconnectConfigInventory(this);
     this.shadowRoot.innerHTML = html;
     _bindLocalIntroDismiss(this.shadowRoot);
     _bindLocalSupportDismiss(this.shadowRoot);
@@ -3190,18 +3349,20 @@ ${_RESPONSIVE_CONTROL_CSS}
       this._lastAuditTime = Date.now();
       this._runAudit();
     });
-    this._updateContent();
+    this._updateContent(inventoryFocus);
   }
 
-  _updateContent() {
+  _updateContent(restoreInventoryFocus = null) {
     if (this._hass?.user?.is_admin !== true) { this._render(); return; }
     const content = this.shadowRoot.getElementById('content');
     if (!content) return;
+    const inventoryFocus = restoreInventoryFocus || _rememberConfigInventory(this);
+    _disconnectConfigInventory(this);
     this._updateReportControls();
     const refresh = this.shadowRoot.querySelector('.audit-refresh');
     if (refresh) { refresh.disabled = this._loading; refresh.textContent = this._t.refresh; }
-    if (this._loading) { content.innerHTML = `<div class="loading"><div class="spinner"></div>${_esc(this._msg('Running configuration best-practices audit...'))}</div>`; return; }
-    if (!this._auditData || this._auditData.error) { content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._msg('Audit failed'))}${this._auditData?.error ? ': ' + _esc(this._auditData.error) : ''}</div>`; return; }
+    if (this._loading) { this._inventoryMounts = []; content.innerHTML = `<div class="loading"><div class="spinner"></div>${_esc(this._msg('Running configuration best-practices audit...'))}</div>`; return; }
+    if (!this._auditData || this._auditData.error) { this._inventoryMounts = []; content.innerHTML = `<div class="error">\u26A0\uFE0F ${_esc(this._msg('Audit failed'))}${this._auditData?.error ? ': ' + _esc(this._auditData.error) : ''}</div>`; return; }
     const d = this._auditData;
     switch (this._activeTab) {
       case 'overview': content.innerHTML = this._renderOverview(d); break;
@@ -3212,6 +3373,7 @@ ${_RESPONSIVE_CONTROL_CSS}
       case 'tips': content.innerHTML = this._renderTips(d); break;
     }
     this._translateContent(content);
+    _bindConfigInventory(this, inventoryFocus);
   }
 
   _renderOverview(d) {
@@ -3269,13 +3431,13 @@ ${_RESPONSIVE_CONTROL_CSS}
     if (!d.addons.length) {
       return '<div class="empty-msg">No addons installed</div>';
     }
-    return `<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'stopped'))}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? this._msg('N/A') : prot ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? this._msg('N/A') : autoUp ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? this._msg('N/A') : hostNet ? '\u26A0 ' + this._msg('Yes') : this._msg('No')}</td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table" data-config-inventory="addons"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr data-inventory-key="${_esc(a.slug || a.name || '')}"><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'unknown'))}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? this._msg('N/A') : prot ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? this._msg('N/A') : autoUp ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? this._msg('N/A') : hostNet ? '\u26A0 ' + this._msg('Yes') : this._msg('No')}</td></tr>`; }).join('')}</tbody></table></div>`;
   }
 
   _renderUsers(d) {
     if (d.usersAvailable !== true) return '<div class="empty-msg">User accounts are unavailable; check account permissions or retry as an administrator.</div>';
     if (!d.users.length) return '<div class="empty-msg">No user accounts found</div>';
-    return `<div class="table-container"><table class="entity-table"><thead><tr><th>User</th><th>Role</th><th>Active</th><th>Local Only</th><th>System</th></tr></thead><tbody>${d.users.map(u => `<tr><td>${this._sanitize(u.name || this._msg('Unnamed'))}</td><td>${u.is_owner ? '\u{1F451} ' + this._msg('Owner') : u.group_ids?.includes('system-admin') ? this._msg('Admin') : this._msg('User')}</td><td style="color:${u.is_active !== false ? '#4caf50' : '#9e9e9e'}">${u.is_active !== false ? '\u2713 ' + this._msg('Active') : this._msg('Inactive')}</td><td>${u.local_only ? '\u2713 ' + this._msg('Yes') : this._msg('No')}</td><td>${u.system_generated ? '\u{1F916} ' + this._msg('Yes') : this._msg('No')}</td></tr>`).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table" data-config-inventory="users"><thead><tr><th>User</th><th>Role</th><th>Active</th><th>Local Only</th><th>System</th></tr></thead><tbody>${d.users.map(u => `<tr data-inventory-key="${_esc(u.id || u.name || '')}"><td>${this._sanitize(u.name || this._msg('Unnamed'))}</td><td>${u.is_owner ? '\u{1F451} ' + this._msg('Owner') : u.group_ids?.includes('system-admin') ? this._msg('Admin') : this._msg('User')}</td><td style="color:${u.is_active === true ? '#4caf50' : '#9e9e9e'}">${u.is_active === true ? '\u2713 ' + this._msg('Active') : u.is_active === false ? this._msg('Inactive') : this._msg('unknown')}</td><td>${u.local_only ? '\u2713 ' + this._msg('Yes') : this._msg('No')}</td><td>${u.system_generated ? '\u{1F916} ' + this._msg('Yes') : this._msg('No')}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   _renderNetwork(d) {
@@ -3368,12 +3530,12 @@ ${_RESPONSIVE_CONTROL_CSS}
       const portsKnown = d.addonsAvailable === true && d.addons.every(a => Object.hasOwn(a, 'ports') || Object.hasOwn(a, 'network'));
       html += portsKnown ? '<div class="empty-msg">No addons exposing ports</div>' : '<div class="empty-msg">Add-on port inventory is unavailable; exposure was not measured.</div>';
     } else {
-      html += '<div class="table-container"><table class="entity-table"><thead><tr><th>Addon</th><th>Ingress</th><th>Ports</th><th>State</th></tr></thead><tbody>';
+      html += '<div class="table-container"><table class="entity-table" data-config-inventory="ports"><thead><tr><th>Addon</th><th>Ingress</th><th>Ports</th><th>State</th></tr></thead><tbody>';
       exposedAddons.forEach(a => {
         const hasIngress = a.ingress === true;
         const ports = a.ports ? Object.entries(a.ports).map(([port, config]) => `${port}${config.host_port ? `→${config.host_port}` : ''}`).join(', ') : this._msg('N/A');
         const color = hasIngress ? '#4caf50' : a.state === 'started' ? '#ff9800' : '#9e9e9e';
-        html += `<tr><td>${_esc(a.name)}</td><td style="color:${color}">${hasIngress ? '\u2713 ' + this._msg('Yes') : '\u2717 ' + this._msg('No')}</td><td><code style="font-size:12px;background:var(--bento-bg);padding:4px 8px;border-radius:4px">${_esc(ports)}</code></td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'stopped'))}</td></tr>`;
+        html += `<tr data-inventory-key="${_esc(a.slug || a.name || '')}"><td>${_esc(a.name)}</td><td style="color:${color}">${hasIngress ? '\u2713 ' + this._msg('Yes') : '\u2717 ' + this._msg('No')}</td><td><code style="font-size:12px;background:var(--bento-bg);padding:4px 8px;border-radius:4px">${_esc(ports)}</code></td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'unknown'))}</td></tr>`;
       });
       html += '</tbody></table></div>';
     }
@@ -3413,11 +3575,11 @@ ${_RESPONSIVE_CONTROL_CSS}
     html += `<div style="padding:4px 10px;background:rgba(255,152,0,0.08);border-radius:6px;font-size:11px;color:var(--bento-text-secondary);">Flow source unavailable: ${d.integrations.length - knownSource}</div>`;
     if (errorInts.length > 0) html += `<div style="padding:4px 10px;background:rgba(244,67,54,0.08);border-radius:6px;font-size:11px;color:#f44336;">\u26A0 Errors: ${errorInts.length}</div>`;
     html += `</div>`;
-    html += `<div class="table-container"><table class="entity-table"><thead><tr><th>Integration</th><th>Domain</th><th>Config-flow source</th><th>Status</th></tr></thead><tbody>`;
+    html += `<div class="table-container"><table class="entity-table" data-config-inventory="integrations"><thead><tr><th>Integration</th><th>Domain</th><th>Config-flow source</th><th>Status</th></tr></thead><tbody>`;
     d.integrations.forEach(e => {
       const statusColor = e.state === 'loaded' ? '#4caf50' : e.state === 'setup_error' ? '#f44336' : e.state === 'not_loaded' ? '#ff9800' : '#9e9e9e';
       const source = typeof e.source === 'string' && e.source.length > 0 ? e.source : this._msg('N/A');
-      html += `<tr><td>${_esc(e.title || e.domain)}</td><td style="font-family:monospace;font-size:12px">${_esc(e.domain)}</td>`;
+      html += `<tr data-inventory-key="${_esc(e.entry_id || e.domain || '')}"><td>${_esc(e.title || e.domain)}</td><td style="font-family:monospace;font-size:12px">${_esc(e.domain)}</td>`;
       html += `<td><span class="finding-badge badge-info">${_esc(source)}</span></td>`;
       html += `<td style="color:${statusColor};font-weight:600">\u25CF ${_esc(this._msg(e.state || 'unknown'))}</td></tr>`;
     });
@@ -3484,6 +3646,7 @@ ${_RESPONSIVE_CONTROL_CSS}
   }
 
   disconnectedCallback() {
+    _disconnectConfigInventory(this); this._inventoryMounts = []; this._inventoryWidth = null;
     this._tabResizeObserver?.disconnect(); this._tabResizeObserver = null; this._tabContainerWidth = null; this.removeAttribute('data-responsive-tabs-observed');
     this._reportBrowserOff?.();
     this._reportBrowserOff = null;
