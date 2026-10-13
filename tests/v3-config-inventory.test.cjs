@@ -39,7 +39,7 @@ async function fixture(language='en', observed=true, entry='ha-config-auditor.js
   assert.ok(card._auditData && !card._loading,'real audit fixture settled');
   const data=card._auditData;freeze(data);const snapshot=JSON.stringify(data), root=card.shadowRoot;
   const choose=tab=>root.querySelector('.tabs [data-tab="'+tab+'"]').click();
-  const table=kind=>root.querySelector('table[data-config-inventory="'+kind+'"]') || root.querySelectorAll('#content .entity-table')[kind==='integrations'?1:0];
+  const table=kind=>root.querySelector('table[data-config-inventory="'+kind+'"]') || Array.from(root.querySelectorAll('#content .entity-table')).find(table=>table.tHead.rows[0].cells.length==={addons:6,integrations:4,users:5,ports:4}[kind]) || null;
   const records=kind=>Array.from(root.querySelectorAll('.ht-config-records[data-inventory="'+kind+'"] > details'));
   const observer=()=>observers.findLast(o=>!o.disconnected && o.target===root.getElementById('content'));
   const resize=width=>{assert.ok(observer(),'observes actual card content');observer().deliver(width);};
