@@ -60,18 +60,45 @@ test('both private modes exclude raw findings, auth users, names, addresses, tok
  assert.equal(reports.privateCounts({...dangerous,addonsAvailable:false}).addons,null);
 });
 const flush = async () => { for(let i=0;i<100;i++) await new Promise(r=>setImmediate(r)); };
-async function fixture(language='en',reportSource=null) {
+async function fixture(language='en',reportSource=null,behavior=null) {
  const dom=new JSDOM('',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://qa.invalid/',virtualConsole:new VirtualConsole()});
  installDialogHarness(dom.window);
  dom.window.Blob=globalThis.Blob;dom.window.AbortController=globalThis.AbortController;
  dom.window.eval(fs.readFileSync(path.join(__dirname,'../ha-config-auditor.js'),'utf8'));
  const card=dom.window.document.createElement('ha-config-auditor');card.setConfig({title:'QA'});dom.window.document.body.append(card);
  const connection=new dom.window.EventTarget();connection.connected=true;let reads=0;
- const hass={language,connection,user:{id:'CANARY-ADMIN',is_admin:true},states:{},config:{components:[],version:'2026.10.0'},themes:{},callWS:async m=>{reads++;if(m.type==='config/auth/list'||m.type==='config_entries/get'||m.type==='auth/refresh_tokens')return [];if(m.type==='ha_config_auditor/audit')return {version:'6.0.2',report_source:reportSource,findings:[{id:'http_ip_ban',status:'pass',title:'CANARY',detail:'CANARY'}]};throw Error('Unavailable');}};
+ const hass={language,connection,user:{id:'CANARY-ADMIN',is_admin:true},states:{},config:{components:[],version:'2026.10.0'},themes:{},callWS:async m=>{reads++;if(m.type==='config/auth/list'||m.type==='config_entries/get'||m.type==='auth/refresh_tokens')return [];if(behavior&&m.type==='supervisor/api'&&m.endpoint==='/os/info')return {data:behavior.os};if(m.type==='ha_config_auditor/audit')return {version:'6.0.2',report_source:reportSource,findings:[{id:'http_ip_ban',status:behavior?.status||'pass',title:'CANARY',detail:'CANARY'}]};throw Error('Unavailable');}};
  card.hass=hass;await flush();assert.equal(card._loading,false);
  const find=k=>card.shadowRoot.querySelector('[data-ha-tools-export]')?.shadowRoot.querySelector(`[data-export="${k}"]`);
  return {dom,card,hass,reads:()=>reads,find,cleanup:()=>dom.window.close()};
 }
+for (const language of ['en','pl']) test(`saved-report comparison exposes conserved change counts in ${language}`,async()=>{
+ const behavior={status:'warning',os:{version:'18.3',update_available:false}};
+ const f=await fixture(language,null,behavior);
+ try {
+  const {card,dom}=f;
+  card.shadowRoot.querySelector('.report-save').click();
+  const baseline=card.shadowRoot.querySelector('.report-current').value;
+  behavior.status='pass';behavior.os={version:'18.3',update_available:true};
+  card.shadowRoot.querySelector('.audit-refresh').click();await flush();
+  card.shadowRoot.querySelector('.report-save').click();
+  const picker=card.shadowRoot.querySelector('.report-baseline');picker.value=baseline;picker.dispatchEvent(new dom.window.Event('change'));
+  const comparison=card._selectedComparison();assert.equal(comparison.compatible,true);
+  assert.equal(comparison.checks.find(c=>c.id==='server_http_ip_ban').change,'resolved');
+  assert.equal(comparison.checks.find(c=>c.id==='os_update').change,'new');
+  for(const change of ['resolved','new','unknown']){
+   const metric=card.shadowRoot.querySelector(`[data-report-change="${change}"]`);
+   assert.ok(metric,`visible ${change} comparison counter`);
+   assert.equal(Number(metric.querySelector('.stat-value').textContent),comparison.checks.filter(c=>c.change===change).length);
+  }
+  const section=card.shadowRoot.querySelector('.report-comparison');
+  assert.match(section.textContent,language==='pl'?/Zmiany między zapisanymi raportami/:/Changes between saved reports/);
+  assert.doesNotMatch(section.textContent,/CANARY/);
+  behavior.os={version:'18.3'};card.shadowRoot.querySelector('.audit-refresh').click();await flush();card.shadowRoot.querySelector('.report-save').click();
+  const unknown=card._selectedComparison();assert.equal(unknown.checks.find(c=>c.id==='os_update').change,'unknown');
+  assert.equal(Number(card.shadowRoot.querySelector('[data-report-change="unknown"] .stat-value').textContent),unknown.checks.filter(c=>c.change==='unknown').length);
+ }finally{f.cleanup();}
+});
 test('actual audit is saved manually only; new namespace preserves old keys; opening/export adds no reads',async()=>{
  const f=await fixture();try{
  const {card,dom}=f;const reads=f.reads();dom.window.localStorage.setItem('ha-config-auditor-default','{"lastScan":"keep"}');dom.window.localStorage.setItem('neighbor','keep');
