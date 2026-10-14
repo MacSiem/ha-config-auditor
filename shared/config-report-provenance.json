@@ -9,8 +9,8 @@
       "transform": "omit Node test export footer"
     },
     "shared/ha-tools-export.js": {
-      "sourceSha256": "1f9e9c5444ec3b6de44eec136f14ae9e7d89dae1002650b33f746ab9633982f1",
-      "runtimeSha256": "f83f8ba9c0e0f0c41421c1f6beb78074d37ba79582bc15ae4cd9844d026559e5",
+      "sourceSha256": "bae4197cb254a7e24affbf90f029833127c5ba09b5b96f876a6fd8112f816a3d",
+      "runtimeSha256": "a2e0c85f7fcf097d602bb37002a1ad14e968ddb69327b95b61c1c7899b0dedfb",
       "transform": "remove ESM export keyword only"
     },
     "shared/ha-config-reports.js": {
