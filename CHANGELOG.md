@@ -1,6 +1,6 @@
 ## 6.1.0 (2026-10-14)
 
-- Show incomplete or malformed HA OS update metadata as Not checked, without increasing the passed-check counter.
+- Show incomplete or malformed HA OS update metadata in a separate neutral Not checked summary counter and visible Overview rows, without increasing Passed or double-counting Info.
 - Add manually saved local audit reports, stable-check comparison and reviewed JSON/CSV/TXT export. Missing checks remain unknown rather than resolved.
 - Retain at most 20 redacted reports from the last 30 days per account and card namespace; confirm only matching sources after reload and require confirmation before clearing reports.
 - Read an existing HA instance identity without creating, migrating or repairing storage; recheck administrator authority and loaded state after asynchronous reads.

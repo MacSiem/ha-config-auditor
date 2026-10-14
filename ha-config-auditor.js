@@ -1096,6 +1096,8 @@ const AUDIT_COPY_PL = {
   "User accounts unavailable": "Konta użytkowników niedostępne",
   "Entities": "Encje",
   "Checks run": "Wykonane kontrole",
+  "Checks reviewed": "Przejrzane kontrole",
+  "{0} checks reviewed. Review failed and warning items first; not checked results remain unknown.": "Liczba przejrzanych kontroli: {0}. Najpierw przejrzyj niezaliczone kontrole i ostrzeżenia; niesprawdzone wyniki pozostają nieznane.",
   "Last scan: {0}": "Ostatni audyt: {0}",
   "No findings": "Brak wyników",
   "Server-verified": "Zweryfikowano na serwerze",
@@ -2595,11 +2597,7 @@ class HAConfigAuditor extends HTMLElement {
         }
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
-      const critCount = findings.critical.length;
-      const warnCount = findings.warning.length;
-      const passCount = findings.pass.length;
-      const infoCount = findings.info.length;
-      const totalChecks = critCount + warnCount + passCount + infoCount;
+      const {critCount, warnCount, passCount, infoCount, notCheckedCount, totalChecks} = this._summaryCounts(findings);
 
       // Fetch network interfaces from Supervisor API
       let networkInfo = [];
@@ -2636,7 +2634,7 @@ class HAConfigAuditor extends HTMLElement {
       } catch(e) { console.debug('[config-auditor]', e.message); }
 
       if (!isCurrent()) return;
-      this._auditData = { serverVersion, reportSource, findings, critCount, warnCount, passCount, infoCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, integrationsAvailable, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
+      this._auditData = { serverVersion, reportSource, findings, critCount, warnCount, passCount, infoCount, notCheckedCount, totalChecks, users, usersAvailable, addons: installedAddons, addonsAvailable, integrations: cfgEntries, integrationsAvailable, entities: allEntities.length, networkInterfaces: networkInfo, hostInfo: hostInfo };
       this._lastScan = new Date();
       this._setReportIdentity();
     this._saveScanData();
@@ -3312,6 +3310,8 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
       
 
 
+.finding.not-checked { border-left-color:var(--bento-text-secondary);background:var(--bento-bg); }
+.finding.not-checked .finding-icon { color:var(--bento-text-secondary); }
 .report-tools { container-type:inline-size;min-width:0;margin:16px 0;padding:12px;border:1px solid var(--bento-border);border-radius:12px; }
 .report-tools p,.report-tools h3,.report-tools td { overflow-wrap:anywhere; }
 .report-tools .report-actions,.report-tools .report-choices { display:flex;flex-wrap:wrap;gap:8px; }
@@ -3402,25 +3402,38 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
     _bindConfigInventory(this, inventoryFocus);
   }
 
+  _summaryCounts(findings) {
+    const ui = createUiV3({language:this._lang});
+    const isNotChecked = f => f.resultState ? ui.status(f.resultState).code === 'not_checked' : !!f.skipped;
+    const buckets = ['critical','warning','pass','info'].map(key => Array.isArray(findings?.[key]) ? findings[key] : []);
+    const [critCount,warnCount,passCount,infoCount] = buckets.map(rows => rows.filter(f => !isNotChecked(f)).length);
+    const notCheckedFindings = buckets.flat().filter(isNotChecked);
+    const notCheckedCount = notCheckedFindings.length;
+    return {critCount,warnCount,passCount,infoCount,notCheckedCount,notCheckedFindings,totalChecks:critCount+warnCount+passCount+infoCount+notCheckedCount};
+  }
+
   _renderOverview(d) {
+    const summary = this._summaryCounts(d.findings);
     const report = this._auditData && Number.isFinite(this._lastScan?.getTime()) ? configReports.snapshot(d, {timestamp:this._lastScan.toISOString(),context:this._reportContext,id:'r-'+'0'.repeat(32)}) : null;
     let html = `${report ? createUiV3({language:this._lang}).statusHtml(report.status) + '<p>' + _esc(configReports.labels[this._lang].limits) + '</p>' : ''}<div class="audit-summary-section">
       <h3>Configuration best-practice summary</h3>
-      <p>${d.totalChecks} checks run. Review failed and warning items first, then informational findings.</p>
+      <p>${summary.totalChecks} checks reviewed. Review failed and warning items first; not checked results remain unknown.</p>
       <div class="summary-grid">
-        <div class="stat-card"><div class="stat-value" style="color:#f44336">${d.critCount}</div><div class="stat-label">Failed</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:#ff9800">${d.warnCount}</div><div class="stat-label">Warnings</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:#4caf50">${d.passCount}</div><div class="stat-label">Passed</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:#03a9f4">${d.infoCount}</div><div class="stat-label">Info</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#f44336">${summary.critCount}</div><div class="stat-label">Failed</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#ff9800">${summary.warnCount}</div><div class="stat-label">Warnings</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#4caf50">${summary.passCount}</div><div class="stat-label">Passed</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#03a9f4">${summary.infoCount}</div><div class="stat-label">Info</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.notCheckedCount}</div><div class="stat-label">${createUiV3({language:this._lang}).statusHtml('not_checked')}</div></div>
       </div>
     </div>`;
     const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
     const addonsDisplay = d.addonsAvailable === true ? String(d.addons.length) : 'N/A';
     const integrationsDisplay = d.integrationsAvailable === true ? String(d.integrations.length) : 'N/A';
     const usersDisplay = d.usersAvailable === true ? String(d.users.length) : 'N/A';
-    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.integrationsAvailable === true ? 'Integrations' : 'Integrations unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks run</div></div></div>`;
-    if (d.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
-    if (d.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.integrationsAvailable === true ? 'Integrations' : 'Integrations unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${summary.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks reviewed</div></div></div>`;
+    if (summary.notCheckedCount > 0) { html += '<div class="section-title">' + _esc(this._msg('Not checked')) + '</div>'; summary.notCheckedFindings.forEach(f => { html += this._renderFinding(f, 'info'); }); }
+    if (summary.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
+    if (summary.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
     if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString(this._t.locale)}</div>`; }
     return html;
   }
@@ -3439,8 +3452,9 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
     const icons = { critical: '\u{1F6A8}', warning: '\u26A0\uFE0F', info: '\u2139\uFE0F', pass: '\u2705' };
     const labels = { critical: 'Failed', warning: 'Warning', info: 'Info', pass: 'Pass' };
     const resultState = f.resultState || (f.skipped ? 'not_checked' : severity === 'pass' ? 'success' : null);
+    const notChecked = resultState && createUiV3({language:this._lang}).status(resultState).code === 'not_checked';
     const resultBadge = resultState ? createUiV3({ language: this._lang }).statusHtml(resultState) : `<span class="finding-badge badge-${severity}">${labels[severity]}</span>`;
-    return `<div class="finding ${severity}"><div class="finding-header"><span class="finding-icon">${icons[severity]}</span><span class="finding-title" data-audit-value>${_esc(this._msg(f.skipped ? f.title.replace(/ \(not checked\)$/, '') : f.title))}${f.skipped ? ' (' + this._msg('Not checked').toLowerCase() + ')' : ''}</span>${resultBadge}${f.verified ? '<span class="finding-badge badge-verified" title="Checked by the Config Auditor integration on the Home Assistant server">Server-verified</span>' : ''}</div><div class="finding-desc" data-audit-value>${_esc(this._msg(f.desc))}</div>${f.fix ? `<div class="finding-fix" data-audit-value>\u{1F4A1} ${_esc(this._msg(f.fix))}</div>` : ''}</div>`;
+    return `<div class="finding ${severity}${notChecked ? ' not-checked' : ''}"><div class="finding-header"><span class="finding-icon">${notChecked ? '–' : icons[severity]}</span><span class="finding-title" data-audit-value>${_esc(this._msg(f.skipped ? f.title.replace(/ \(not checked\)$/, '') : f.title))}${f.skipped ? ' (' + this._msg('Not checked').toLowerCase() + ')' : ''}</span>${resultBadge}${f.verified ? '<span class="finding-badge badge-verified" title="Checked by the Config Auditor integration on the Home Assistant server">Server-verified</span>' : ''}</div><div class="finding-desc" data-audit-value>${_esc(this._msg(f.desc))}</div>${f.fix ? `<div class="finding-fix" data-audit-value>\u{1F4A1} ${_esc(this._msg(f.fix))}</div>` : ''}</div>`;
   }
 
   _renderAddonsAndIntegrations(d) {
