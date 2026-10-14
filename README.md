@@ -6,7 +6,7 @@ Configuration best-practices audit for Home Assistant. Since 6.0.0 the
 repository contains a **Home Assistant integration** that verifies login,
 administrator and HTTP settings on the server and scans YAML files for
 plain-text secrets, plus the Config Auditor card and an admin-only sidebar
-panel. It reports Pass / Warning / Failed / Info findings with fixes and
+panel. It reports Pass / Warning / Failed / Info / Not checked findings with fixes and
 changes nothing on its own. It is a review aid, not a security scanner.
 
 [![Version](https://img.shields.io/github/v/release/MacSiem/ha-config-auditor)](https://github.com/MacSiem/ha-config-auditor/releases) [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -87,6 +87,8 @@ After an audit, choose **Save report** to retain a redacted snapshot in this
 browser. Reports belong to the current account and card `storage_key`; retention
 is at most 20 reports from the last 30 days. No report is saved automatically.
 Choose two saved reports to see new, still present, resolved and unknown checks.
+The comparison summarizes resolved, new and not checked counts separately;
+missing or unverified evidence never increases the resolved count.
 Only confirmed matching HA sources, accounts, methods, versions and scopes can
 be compared after a reload. If identity or evidence is unavailable, the result
 explains the limitation instead of declaring a fix.
@@ -105,8 +107,8 @@ namespace, preserving other browser data.
 |---|---|
 | ![Overview tab, light theme](docs/screenshots/card-overview-light.png) | ![Overview tab, dark theme](docs/screenshots/card-overview-dark.png) |
 
-*Overview tab with synthetic checks: Failed, Warnings, Passed and Info counts,
-plus example findings. No household configuration appears in the image. Dark
+*Overview summary with synthetic checks: Failed, Warnings, Passed, Info and
+the separate Not checked count, plus example findings. No household configuration appears in the image. Dark
 mode follows your Home Assistant theme.*
 
 ## Installation
@@ -154,7 +156,8 @@ checks are then reported as unavailable.
 
 - **Overview, Findings, Add-ons & Integrations, Network, Users and Tips**
   tabs.
-- Pass / Warning / Failed / Info findings with actionable fix suggestions.
+- Pass / Warning / Failed / Info findings with actionable fix suggestions,
+  plus a separate neutral Not checked summary for unavailable evidence.
 - Supervisor/OS/Core update checks, add-on hygiene, SSL/exposure checks,
   user review and current-account token counts, backup-encryption and MQTT-auth checks.
 - Bundled Bento Design System (light + dark mode, follows your HA theme,

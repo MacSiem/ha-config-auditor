@@ -83,14 +83,17 @@
   const states = {};
   list.forEach(s => { states[s.entity_id] = s; });
 
+  // Documentation-only synthetic protocol inputs. The ordinary product audit
+  // creates every finding and count; this fixture never contacts real HA.
   const hass = {
+    user: { id: 'documentation-demo-admin', is_admin: true },
     language: 'en',
     themes: { darkMode: theme === 'dark' },
     states,
     services: {},
     config: {
       location_name: 'Home',
-      version: '2024.6.0',
+      version: '2026.10.1',
       time_zone: 'Europe/Warsaw',
       external_url: 'https://home.example.duckdns.org',
       internal_url: 'http://192.168.1.10:8123',
@@ -105,11 +108,17 @@
     callWS: async (msg) => {
       const t = String(msg && msg.type || '');
       const ep = String(msg && msg.endpoint || '');
+      if (t === 'ha_config_auditor/audit') return { version: '6.1.0', report_source: null, findings: [
+        { id: 'auth_providers', status: 'pass', title: 'Login providers', detail: 'The example uses standard authentication.' },
+        { id: 'http_ip_ban', status: 'pass', title: 'IP ban', detail: 'Configured in the example.' },
+        { id: 'auth_admin_mfa', status: 'warning', title: 'Administrator MFA', detail: 'Review administrator accounts without two-factor authentication.' },
+      ] };
       if (t === 'supervisor/api') {
         if (ep === '/host/info') return { data: { chassis: 'embedded', hostname: 'homeassistant' } };
-        if (ep === '/os/info') return { data: { version: '12.3', version_latest: '12.3', update_available: false } };
-        if (ep === '/supervisor/info') return { data: { version: '2024.06.0', version_latest: '2024.06.2', debug: false, debug_block: false } };
-        if (ep === '/core/info') return { data: { version: '2024.6.0', version_latest: '2024.6.0' } };
+        // A version alone does not prove that no OS update is available.
+        if (ep === '/os/info') return { data: { version: '18.3' } };
+        if (ep === '/supervisor/info') return { data: { version: '2026.10.0', version_latest: '2026.10.1', update_available: true, debug: false, debug_block: false } };
+        if (ep === '/core/info') return { data: { version: '2026.10.1', version_latest: '2026.10.1', update_available: false } };
         if (ep === '/addons') return { addons };
         if (ep === '/backups') return { backups: [{ slug: 'ab12cd', name: 'Full Backup', protected: true }, { slug: 'ef34gh', name: 'Auto Backup', protected: false }] };
         if (ep === '/network/info') {
@@ -120,16 +129,16 @@
             ],
           };
         }
-        if (ep === '/info') return { hostname: 'homeassistant', operating_system: 'Home Assistant OS 12.3', supervisor: '2024.06.0' };
+        if (ep === '/info') return { hostname: 'example-host', operating_system: 'Example OS', supervisor: '2026.10.0' };
         if (ep.indexOf('/addons/') === 0 && ep.indexOf('/options') > -1) return { options: { anonymous: false } };
-        return {};
+        const error = new Error('Unavailable in documentation demo'); error.code = 'unknown_command'; throw error;
       }
       if (t === 'config/core/info') return {};
       if (t === 'config/auth/list') return users;
-      if (t === 'auth/long_lived_access_token/list') return [{ id: 't1' }, { id: 't2' }, { id: 't3' }];
-      if (t === 'config_entries/list') return configEntries;
+      if (t === 'auth/refresh_tokens') return [];
+      if (t === 'config_entries/get') return configEntries;
       if (t === 'network') return { adapters: [] };
-      return {};
+      const error = new Error('Unavailable in documentation demo'); error.code = 'unknown_command'; throw error;
     },
     callApi: async (method, path) => {
       if (String(path).indexOf('config/ip_ban') === 0) return { banned_ips: ['203.0.113.5', '198.51.100.23'] };
@@ -139,7 +148,7 @@
   };
 
   const card = document.getElementById('card');
-  card.setConfig({ type: 'custom:ha-config-auditor', title: 'Config Auditor' });
+  card.setConfig({ type: 'custom:ha-config-auditor', title: 'Config Auditor', storage_key: 'documentation-demo', show_support: false });
   card.hass = hass;
   setTimeout(() => { card.hass = { ...hass }; }, 400);
   if (tab) {
@@ -147,9 +156,6 @@
       try { card.shadowRoot.querySelector('[data-tab="' + tab + '"]').click(); } catch (e) {}
     }, 900);
   }
-  const scrub = () => { try { card.shadowRoot && card.shadowRoot.querySelectorAll('#tip-banner, [class*="banner"], .donate-section').forEach(n => n.remove()); } catch (e) {} };
-  setInterval(scrub, 150);
-  setTimeout(() => { scrub(); document.title = 'CA-READY'; }, 1500);
 })();
 </script>
 </body>
