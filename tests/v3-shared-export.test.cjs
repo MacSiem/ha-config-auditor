@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
+const installDialogHarness = require('./helpers/native-dialog.cjs');
 const { createUiV3 } = require('../shared/ha-tools-ui.js');
 const factory = import('data:text/javascript;base64,' + fs.readFileSync(path.join(__dirname, '../shared/ha-tools-export.js')).toString('base64'));
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
@@ -11,6 +12,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a, b)
 async function fixture(options = {}) {
   const { createExportDialog } = await factory;
   const dom = new JSDOM('<button id="opener">Open</button><main id="root"><p id="neighbor">Keep me</p></main><aside>Other card</aside>');
+  const nativeDialogs = installDialogHarness(dom.window);
   const doc = dom.window.document, root = doc.getElementById('root');
   let context = { role: 'admin', userId: 'synthetic-user', connectionId: 'synthetic-connection', datasetId: 'synthetic-report', revision: 1, connected: true, canExport: true, sourceConfirmed: true };
   let language = options.language || 'en', now = 100;
@@ -22,7 +24,7 @@ async function fixture(options = {}) {
   const focused = () => root.querySelector('[data-ha-tools-export]')?.shadowRoot.activeElement || doc.activeElement;
   const open = async () => { doc.getElementById('opener').focus(); controller.open({ opener: doc.activeElement }); await flush(); };
   const edit = (key, value) => { const node = find(key); if (key === 'private') node.checked = value; else node.value = value; node.dispatchEvent(new dom.window.Event(key === 'filename' ? 'input' : 'change', { bubbles: true })); };
-  return { dom, doc, root, controller, builds, downloads, timers, payload, find, focused, open, edit, setContext: delta => { context = { ...context, ...delta }; }, setLanguage: value => { language = value; }, advance: ms => { now += ms; }, expire: () => { for (const { fn } of [...timers.values()]) fn(); }, cleanup: () => { controller.destroy(); dom.window.close(); } };
+  return { dom, doc, root, nativeDialogs, controller, builds, downloads, timers, payload, find, focused, open, edit, setContext: delta => { context = { ...context, ...delta }; }, setLanguage: value => { language = value; }, advance: ms => { now += ms; }, expire: () => { for (const { fn } of [...timers.values()]) fn(); }, cleanup: () => { controller.destroy(); dom.window.close(); } };
 }
 
 test('construction is inert; open builds one private-OFF preview and never downloads', async () => {
@@ -247,4 +249,44 @@ test('valid basename can contain repeated dots without being a path', async () =
   const f = await fixture();await f.open();f.edit('filename','report..2026.json');f.find('refresh').click();await flush();
   assert.equal(f.find('save').disabled,false);f.find('save').click();await flush();
   assert.equal(f.downloads[0].filename,'report..2026.json');f.cleanup();
+});
+
+
+test('export uses the native modal lifecycle and keeps the full reviewed scope', async () => {
+  const f = await fixture(); await f.open();
+  const dialog = f.find('dialog');
+  assert.equal(dialog.tagName, 'DIALOG');
+  assert.equal(dialog.matches(':modal'), true);
+  assert.equal(f.nativeDialogs.calls[0].connected, true);
+  assert.equal(f.find('included').closest('[data-export-scope]').dataset.exportScope, 'included');
+  assert.equal(f.find('excluded').closest('[data-export-scope]').dataset.exportScope, 'excluded');
+  const event = new f.dom.window.Event('cancel', { cancelable: true });
+  dialog.dispatchEvent(event); await flush();
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(dialog.open, false);
+  assert.equal(f.root.querySelector('[data-ha-tools-export]'), null);
+  assert.equal(f.doc.activeElement.id, 'opener');
+  f.cleanup();
+});
+
+test('external native close aborts a pending preview; a late old close cannot close a new intent', async () => {
+  const pending = deferred(); const f = await fixture({ build: () => pending.promise }); await f.open();
+  const old = f.find('dialog'); assert.equal(old.tagName, 'DIALOG');
+  old.close(); await flush();
+  assert.equal(f.builds[0].signal.aborted, true);
+  assert.equal(f.root.querySelector('[data-ha-tools-export]'), null);
+  await f.open(); const current = f.find('dialog');
+  old.dispatchEvent(new f.dom.window.Event('close'));
+  assert.equal(current.matches(':modal'), true);
+  pending.resolve(f.payload(f.builds[0].draft)); await flush();
+  assert.equal(f.downloads.length, 0);
+  f.cleanup();
+});
+
+test('missing native modal support cleans up instead of exposing an inline save flow', async () => {
+  const f = await fixture(); f.dom.window.HTMLDialogElement.prototype.showModal = undefined;
+  assert.throws(() => f.controller.open({ opener: f.doc.getElementById('opener') }), /dialog|modal/i);
+  assert.equal(f.root.querySelector('[data-ha-tools-export]'), null);
+  assert.equal(f.builds.length, 0); assert.equal(f.downloads.length, 0);
+  f.cleanup();
 });

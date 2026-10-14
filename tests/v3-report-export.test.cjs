@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM, VirtualConsole } = require('jsdom');
+const installDialogHarness = require('./helpers/native-dialog.cjs');
 const { createAuditReports } = require('../shared/ha-config-reports.js');
 const reports = createAuditReports();
 const NOW = '2026-10-12T12:00:00.000Z';
@@ -61,6 +62,7 @@ test('both private modes exclude raw findings, auth users, names, addresses, tok
 const flush = async () => { for(let i=0;i<100;i++) await new Promise(r=>setImmediate(r)); };
 async function fixture(language='en',reportSource=null) {
  const dom=new JSDOM('',{runScripts:'dangerously',pretendToBeVisual:true,url:'http://qa.invalid/',virtualConsole:new VirtualConsole()});
+ installDialogHarness(dom.window);
  dom.window.Blob=globalThis.Blob;dom.window.AbortController=globalThis.AbortController;
  dom.window.eval(fs.readFileSync(path.join(__dirname,'../ha-config-auditor.js'),'utf8'));
  const card=dom.window.document.createElement('ha-config-auditor');card.setConfig({title:'QA'});dom.window.document.body.append(card);
