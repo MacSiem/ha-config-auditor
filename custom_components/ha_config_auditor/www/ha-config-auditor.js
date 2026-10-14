@@ -3414,15 +3414,16 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
 
   _renderOverview(d) {
     const summary = this._summaryCounts(d.findings);
+    const unknown = new Set(summary.notCheckedFindings);
     const report = this._auditData && Number.isFinite(this._lastScan?.getTime()) ? configReports.snapshot(d, {timestamp:this._lastScan.toISOString(),context:this._reportContext,id:'r-'+'0'.repeat(32)}) : null;
     let html = `${report ? createUiV3({language:this._lang}).statusHtml(report.status) + '<p>' + _esc(configReports.labels[this._lang].limits) + '</p>' : ''}<div class="audit-summary-section">
       <h3>Configuration best-practice summary</h3>
       <p>${summary.totalChecks} checks reviewed. Review failed and warning items first; not checked results remain unknown.</p>
       <div class="summary-grid">
-        <div class="stat-card"><div class="stat-value" style="color:#f44336">${summary.critCount}</div><div class="stat-label">Failed</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:#ff9800">${summary.warnCount}</div><div class="stat-label">Warnings</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:#4caf50">${summary.passCount}</div><div class="stat-label">Passed</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:#03a9f4">${summary.infoCount}</div><div class="stat-label">Info</div></div>
+        <div class="stat-card"><div class="stat-value ht-result-state--error" style="background:transparent">${summary.critCount}</div><div class="stat-label">Failed</div></div>
+        <div class="stat-card"><div class="stat-value ht-result-state--partial" style="background:transparent">${summary.warnCount}</div><div class="stat-label">Warnings</div></div>
+        <div class="stat-card"><div class="stat-value ht-result-state--success" style="background:transparent">${summary.passCount}</div><div class="stat-label">Passed</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.infoCount}</div><div class="stat-label">Info</div></div>
         <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.notCheckedCount}</div><div class="stat-label">${createUiV3({language:this._lang}).statusHtml('not_checked')}</div></div>
       </div>
     </div>`;
@@ -3432,18 +3433,21 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
     const usersDisplay = d.usersAvailable === true ? String(d.users.length) : 'N/A';
     html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px"><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${addonsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.addonsAvailable === true ? 'Addons installed' : 'Addons unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${integrationsDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.integrationsAvailable === true ? 'Integrations' : 'Integrations unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${usersDisplay}</div><div style="font-size:11px;color:var(--bento-text-secondary)">${d.usersAvailable === true ? 'User accounts' : 'User accounts unavailable'}</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${d.entities}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Entities</div></div><div style="padding:10px;background:var(--bento-bg);border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:700">${summary.totalChecks}</div><div style="font-size:11px;color:var(--bento-text-secondary)">Checks reviewed</div></div></div>`;
     if (summary.notCheckedCount > 0) { html += '<div class="section-title">' + _esc(this._msg('Not checked')) + '</div>'; summary.notCheckedFindings.forEach(f => { html += this._renderFinding(f, 'info'); }); }
-    if (summary.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
-    if (summary.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
+    if (summary.critCount > 0) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.filter(f => !unknown.has(f)).forEach(f => { html += this._renderFinding(f, 'critical'); }); }
+    if (summary.warnCount > 0) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.filter(f => !unknown.has(f)).forEach(f => { html += this._renderFinding(f, 'warning'); }); }
     if (this._lastScan) { html += `<div class="scan-info">Last scan: ${this._lastScan.toLocaleString(this._t.locale)}</div>`; }
     return html;
   }
 
   _renderFindings(d) {
+    const summary = this._summaryCounts(d.findings);
+    const unknown = new Set(summary.notCheckedFindings);
     let html = '';
-    if (d.findings.critical.length) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.forEach(f => { html += this._renderFinding(f, 'critical'); }); }
-    if (d.findings.warning.length) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.forEach(f => { html += this._renderFinding(f, 'warning'); }); }
-    if (d.findings.info.length) { html += '<div class="section-title">\u2139\uFE0F Informational</div>'; d.findings.info.forEach(f => { html += this._renderFinding(f, 'info'); }); }
-    if (d.findings.pass.length) { html += '<div class="section-title">\u2705 Passed</div>'; d.findings.pass.forEach(f => { html += this._renderFinding(f, 'pass'); }); }
+    if (summary.notCheckedCount) { html += '<div class="section-title">' + _esc(this._msg('Not checked')) + '</div>'; summary.notCheckedFindings.forEach(f => { html += this._renderFinding(f, 'info'); }); }
+    if (summary.critCount) { html += '<div class="section-title">\u{1F6A8} Failed Checks</div>'; d.findings.critical.filter(f => !unknown.has(f)).forEach(f => { html += this._renderFinding(f, 'critical'); }); }
+    if (summary.warnCount) { html += '<div class="section-title">\u26A0\uFE0F Warnings</div>'; d.findings.warning.filter(f => !unknown.has(f)).forEach(f => { html += this._renderFinding(f, 'warning'); }); }
+    if (summary.infoCount) { html += '<div class="section-title">\u2139\uFE0F Informational</div>'; d.findings.info.filter(f => !unknown.has(f)).forEach(f => { html += this._renderFinding(f, 'info'); }); }
+    if (summary.passCount) { html += '<div class="section-title">\u2705 Passed</div>'; d.findings.pass.filter(f => !unknown.has(f)).forEach(f => { html += this._renderFinding(f, 'pass'); }); }
     if (!html) html = '<div class="empty-msg">No findings</div>';
     return html;
   }
