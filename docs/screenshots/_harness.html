@@ -14,9 +14,6 @@
 </head>
 <body>
 <ha-config-auditor id="card"></ha-config-auditor>
-<script>
-  try { localStorage.setItem('ha-intro-dismissed-ha-config-auditor', '1'); } catch (e) {}
-</script>
 <script src="../../ha-config-auditor.js"></script>
 <script>
 (function () {
@@ -30,14 +27,14 @@
   const addons = [
     { slug: 'core_mosquitto', name: 'Mosquitto broker', version: '6.4.1', version_latest: '6.4.1', installed: true, state: 'started', protected: true, auto_update: true, host_network: false, ingress: false, privileged: false, devices: [], ports: { '1883/tcp': { host_port: 1883 } }, update_available: false },
     { slug: 'core_ssh', name: 'Terminal & SSH', version: '9.14.0', version_latest: '9.15.0', installed: true, state: 'started', protected: true, auto_update: false, host_network: true, ingress: false, privileged: false, devices: [], ports: { '22/tcp': { host_port: 22222 } }, update_available: true },
-    { slug: 'hacs', name: 'HACS', version: '2.0.5', version_latest: '2.0.5', installed: true, state: 'started', protected: false, auto_update: true, host_network: false, ingress: true, privileged: false, devices: [], ports: {}, update_available: false },
+    { slug: 'demo_custom', name: 'Example add-on', version: '2.0.5', version_latest: '2.0.5', installed: true, state: 'started', protected: false, auto_update: true, host_network: false, ingress: true, privileged: false, devices: [], ports: {}, update_available: false },
     { slug: 'core_samba', name: 'Samba share', version: '12.3.1', version_latest: '12.3.1', installed: true, state: 'started', protected: true, auto_update: false, host_network: false, ingress: false, privileged: false, devices: [], ports: { '445/tcp': { host_port: 445 } }, update_available: false },
   ];
 
   // -- Users (config/auth/list) --
   const users = [
     { id: 'u1', name: 'Alex', is_owner: true, is_active: true, local_only: false, group_ids: ['system-admin'], system_generated: false, refresh_tokens: [{ id: 'rt1' }] },
-    { id: 'u2', name: 'Backup Admin', is_owner: true, is_active: true, local_only: false, group_ids: ['system-admin'], system_generated: false, refresh_tokens: [] },
+    { id: 'u2', name: 'Backup Admin', is_owner: false, is_active: true, local_only: false, group_ids: ['system-admin'], system_generated: false, refresh_tokens: [] },
     { id: 'u3', name: 'Guest', is_owner: false, is_active: true, local_only: true, group_ids: ['system-users'], system_generated: false, refresh_tokens: [] },
   ];
 
@@ -47,8 +44,8 @@
     { title: 'Met.no Weather', domain: 'met', source: 'user', state: 'loaded' },
     { title: 'Mobile App', domain: 'mobile_app', source: 'user', state: 'loaded' },
     { title: 'Google Cast', domain: 'cast', source: 'user', state: 'loaded' },
-    { title: 'Frigate', domain: 'frigate', source: 'hacs', state: 'loaded' },
-    { title: 'Xiaomi Miio', domain: 'xiaomi_miio', source: 'hacs', state: 'setup_error' },
+    { title: 'Frigate', domain: 'frigate', source: 'user', state: 'loaded' },
+    { title: 'Xiaomi Miio', domain: 'xiaomi_miio', source: 'user', state: 'setup_error' },
     { title: 'Spotify', domain: 'spotify', source: 'user', state: 'loaded' },
     { title: 'Nest', domain: 'nest', source: 'user', state: 'not_loaded' },
   ];
