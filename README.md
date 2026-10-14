@@ -16,6 +16,9 @@ Polish, including `pl-PL`). Since 6.0.2, changing that language translates the
 visible results immediately, preserving the active tab and cached audit data
 without making another audit request. Other profile languages use English.
 
+Version 6.1 adds manual local audit reports and comparison by stable check IDs.
+An unavailable or skipped check stays unknown and cannot appear as resolved.
+
 ## How it works
 
 **Server-verified checks (integration).** The integration runs these on the
@@ -77,6 +80,24 @@ instead of guessing.
 | Card registered for dashboards (no resource to add) | Applying any suggested fix yourself |
 | Supervisor/OS/Core, add-on, network, user and entity checks in the card | Setting a custom card title |
 | Optional: failed and warning checks as **Settings → Repairs** issues, refreshed every 12 hours | |
+
+### Local reports and comparison
+
+After an audit, choose **Save report** to retain a redacted snapshot in this
+browser. Reports belong to the current account and card `storage_key`; retention
+is at most 20 reports from the last 30 days. No report is saved automatically.
+Choose two saved reports to see new, still present, resolved and unknown checks.
+Only confirmed matching HA sources, accounts, methods, versions and scopes can
+be compared after a reload. If identity or evidence is unavailable, the result
+explains the limitation instead of declaring a fix.
+
+**Export selected report** opens a review dialog with filename, JSON/CSV/TXT
+format, Included/Excluded scope and the exact preview before Save. Private
+inventory counts are off by default; opting in adds only aggregate counts.
+Names, addresses, users, tokens, raw findings and configuration are excluded.
+The adapter distinguishes confirmed saves from unconfirmed download initiation.
+**Clear saved reports** requires confirmation and affects only this report
+namespace, preserving other browser data.
 
 ## Screenshots
 
@@ -140,7 +161,12 @@ checks are then reported as unavailable.
   mobile-friendly).
 - Self-contained — no shared HA Tools dependency.
 - Last-scan timestamp is cached in browser `localStorage`; audit results
-  themselves are recomputed on each scan, not stored.
+  are recomputed on each scan. Redacted report snapshots are stored only after
+  an explicit Save report action, with the retention limits above.
+- Stable-check comparison and reviewed redacted JSON/CSV/TXT export; unknown
+  evidence is never counted as resolved.
+- Responsive inventories retain every original field and action in narrow
+  cards; keyboard navigation and configuration input keep their focus.
 - Integration: server-verified checks, admin-only sidebar panel, optional
   Repairs issues, automatic card registration.
 
@@ -187,6 +213,13 @@ MIT, see [LICENSE](LICENSE).
 ## Privacy and data
 
 The integration reads security settings and allowed configuration files on your Home Assistant server. Audit results can reveal security weaknesses. Treat findings and YAML as private, and share only a minimal redacted reproduction. The audit itself does not modify the configuration.
+
+Manual report snapshots persist locally in this browser for the current account
+and card namespace. Their schema excludes raw findings, names, account IDs,
+tokens, addresses and configuration. Local namespace references are not export
+fields. The integration reads the existing HA instance identity through bounded
+read-only access to confirm comparisons; it does not create, repair or migrate
+that storage. Missing identity leaves cross-session comparison unavailable.
 
 See [SECURITY.md](SECURITY.md) for safe vulnerability reporting and [NOTICE](NOTICE) for licensing notices.
 

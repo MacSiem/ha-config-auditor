@@ -19,12 +19,13 @@ jobs:
           - core: '2025.2.0'
             python: '3.13'
             harness: '0.13.210'
-          - core: '2026.9.4'
+          - core: '2026.10.1'
             python: '3.14'
-            harness: '0.13.367'
-          - core: '2026.10.0b2'
+            harness: '0.13.372'
+          - core: '2026.10.0b7'
             python: '3.14'
-            harness: '0.13.369'
+            harness: '0.13.372'
+            override_core: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,6 +34,11 @@ jobs:
       - name: Install Home Assistant test harness
         run: |
           pip install "pytest-homeassistant-custom-component==${{ matrix.harness }}"
+          # The newest upstream fixtures pin stable HA. Exercise the real latest
+          # published beta explicitly, retaining its real version assertion.
+          if [ '${{ matrix.override_core }}' = 'true' ]; then
+            pip install 'homeassistant==${{ matrix.core }}'
+          fi
           python - <<'PYVER'
           from homeassistant.const import __version__
           assert __version__ == '${{ matrix.core }}', __version__

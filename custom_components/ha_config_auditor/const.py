@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "ha_config_auditor"
 NAME: Final = "Config Auditor"
-VERSION: Final = "6.0.2"
+VERSION: Final = "6.1.0"
 
 CARD_FILENAME: Final = "ha-config-auditor.js"
 CARD_ELEMENT: Final = "ha-config-auditor"

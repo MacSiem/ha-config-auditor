@@ -1,3 +1,13 @@
+## 6.1.0 (2026-10-14)
+
+- Show incomplete or malformed HA OS update metadata as Not checked, without increasing the passed-check counter.
+- Add manually saved local audit reports, stable-check comparison and reviewed JSON/CSV/TXT export. Missing checks remain unknown rather than resolved.
+- Retain at most 20 redacted reports from the last 30 days per account and card namespace; confirm only matching sources after reload and require confirmation before clearing reports.
+- Read an existing HA instance identity without creating, migrating or repairing storage; recheck administrator authority and loaded state after asynchronous reads.
+- Add native export dialogs with explicit Included/Excluded scope, filename and format review, exact frozen previews and private aggregate counts off by default.
+- Preserve every inventory field in narrow cards, 44px navigation, Polish/English result labels and editor focus, selection and unknown configuration fields.
+- Keep the complete card and integration bundles identical.
+
 ## 6.0.2 (2026-10-11)
 
 - Translate tabs, loading, summaries, findings, severities, tips and unavailable/empty states into Polish from the Home Assistant profile language.
