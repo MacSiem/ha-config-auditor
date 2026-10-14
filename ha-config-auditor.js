@@ -3326,8 +3326,7 @@ canvas, .canvas-container canvas { width: 100%; height: 200px; border: 1px solid
 .report-tools button { padding:8px 12px; }
 .report-tools label { display:flex;flex:1 1 220px;min-width:0;flex-direction:column;gap:4px; }
 .report-change-summary { display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin:12px 0; }
-.report-change-summary .stat-card { padding:12px; }
-.report-change-summary .stat-label { font-size:11px;letter-spacing:normal; }
+.report-change-summary .stat-label { font-size:11px;letter-spacing:normal;text-transform:none; }
 .report-tools table { width:100%;border-collapse:collapse;table-layout:fixed; }
 .report-tools th,.report-tools td { padding:8px;text-align:start;vertical-align:top; }
 .report-tools :focus-visible { outline:3px solid var(--primary-color,#1769aa);outline-offset:2px; }
