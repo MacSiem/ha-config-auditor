@@ -3420,9 +3420,9 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
       <h3>Configuration best-practice summary</h3>
       <p>${summary.totalChecks} checks reviewed. Review failed and warning items first; not checked results remain unknown.</p>
       <div class="summary-grid">
-        <div class="stat-card"><div class="stat-value ht-result-state--error" style="background:transparent">${summary.critCount}</div><div class="stat-label">Failed</div></div>
-        <div class="stat-card"><div class="stat-value ht-result-state--partial" style="background:transparent">${summary.warnCount}</div><div class="stat-label">Warnings</div></div>
-        <div class="stat-card"><div class="stat-value ht-result-state--success" style="background:transparent">${summary.passCount}</div><div class="stat-label">Passed</div></div>
+        <div class="stat-card"><div class="stat-value"><span class="ht-result-state--error" style="background:transparent">${summary.critCount}</span></div><div class="stat-label">Failed</div></div>
+        <div class="stat-card"><div class="stat-value"><span class="ht-result-state--partial" style="background:transparent">${summary.warnCount}</span></div><div class="stat-label">Warnings</div></div>
+        <div class="stat-card"><div class="stat-value"><span class="ht-result-state--success" style="background:transparent">${summary.passCount}</span></div><div class="stat-label">Passed</div></div>
         <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.infoCount}</div><div class="stat-label">Info</div></div>
         <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.notCheckedCount}</div><div class="stat-label">${createUiV3({language:this._lang}).statusHtml('not_checked')}</div></div>
       </div>
