@@ -3424,7 +3424,7 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
         <div class="stat-card"><div class="stat-value"><span class="ht-result-state--partial" style="background:transparent">${summary.warnCount}</span></div><div class="stat-label">Warnings</div></div>
         <div class="stat-card"><div class="stat-value"><span class="ht-result-state--success" style="background:transparent">${summary.passCount}</span></div><div class="stat-label">Passed</div></div>
         <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.infoCount}</div><div class="stat-label">Info</div></div>
-        <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.notCheckedCount}</div><div class="stat-label">${createUiV3({language:this._lang}).statusHtml('not_checked')}</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--bento-text-secondary)">${summary.notCheckedCount}</div><div class="stat-label">${_esc(this._msg('Not checked'))}</div></div>
       </div>
     </div>`;
     const noSupervisor = d.findings?.info?.some(f => f.id === 'no_supervisor');
