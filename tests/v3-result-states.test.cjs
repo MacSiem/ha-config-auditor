@@ -29,7 +29,9 @@ async function auditOs(os, language = 'en') {
     for (let i = 0; i < 100 && (card._loading || !card._auditData); i++) await new Promise(r => setTimeout(r, 5));
     assert.ok(card._auditData && !card._loading, 'audit completed');
     const data = card._auditData;
-    return { data, text: card._renderFindings(data) };
+    const summary = Array.from(card.shadowRoot.querySelectorAll('.summary-grid .stat-card'), node => ({label: node.querySelector('.stat-label').textContent.trim(), count: Number(node.querySelector('.stat-value').textContent)}));
+    const overviewText = card.shadowRoot.querySelector('#content').textContent;
+    return { data, text: card._renderFindings(data), summary, overviewText };
   } finally { dom.window.close(); }
 }
 
@@ -43,13 +45,20 @@ for (const [description, os] of [
   ['empty response', {}],
 ]) {
   test(`OS ${description} remains not checked and outside success count`, async () => {
-    const { data, text } = await auditOs(os);
+    const { data, text, summary, overviewText } = await auditOs(os);
     assert.equal(data.findings.pass.some(f => f.id === 'os_update'), false);
     assert.equal(data.findings.warning.some(f => f.id === 'os_update'), false);
     const finding = data.findings.info.find(f => f.id === 'os_update');
     assert.ok(finding, 'incomplete OS check stays visible');
     assert.equal(finding.resultState, 'not_checked');
     assert.equal(data.passCount, data.findings.pass.length);
+    const unknown = Object.values(data.findings).flat().filter(f => f.resultState === 'not_checked' || f.skipped === true);
+    assert.equal(data.notCheckedCount, unknown.length);
+    assert.equal(data.infoCount, data.findings.info.filter(f => !unknown.includes(f)).length);
+    assert.equal(summary.find(s => s.label.endsWith('Not checked'))?.count, unknown.length, 'unknown has its own visible neutral counter');
+    assert.equal(summary.find(s => s.label === 'Info')?.count, data.infoCount, 'unknown is not double-counted in Info');
+    assert.match(overviewText, /HA OS update status not checked/, 'unknown OS row is also visible on Overview');
+    assert.equal(data.totalChecks, data.critCount + data.warnCount + data.passCount + data.infoCount + data.notCheckedCount);
     assert.match(text, /Not checked/);
     assert.doesNotMatch(text, /\[object Object\]/);
   });
@@ -65,7 +74,9 @@ test('explicit true with real OS version is an update warning', async () => {
   assert.ok(data.findings.warning.some(f => f.id === 'os_update'));
 });
 test('Polish incomplete OS result uses the visible not-checked label', async () => {
-  const { text } = await auditOs({ version: '18.3' }, 'pl');
+  const { text, data, summary, overviewText } = await auditOs({ version: '18.3' }, 'pl');
+  assert.equal(summary.find(s => s.label.endsWith('Nie sprawdzono'))?.count, data.notCheckedCount);
+  assert.match(overviewText, /Nie sprawdzono/);
   assert.match(text, /Nie sprawdzono/);
   assert.doesNotMatch(text, /HA OS jest aktualny/);
 });
@@ -91,4 +102,14 @@ test('W4 renders six distinct result states with localized labels and no success
     assert.equal(ui.status(null).countsAsSuccess, false);
     assert.equal(ui.status('unexpected').code, 'not_checked');
   }
+});
+
+test('changing only incomplete OS metadata to explicit false moves one counter into Passed without hiding an informational check', async () => {
+  const unknown = await auditOs({version:'18.3'});
+  const current = await auditOs({version:'18.3',update_available:false});
+  assert.equal(current.data.passCount, unknown.data.passCount + 1);
+  assert.equal(unknown.data.notCheckedCount, current.data.notCheckedCount + 1);
+  assert.equal(current.data.infoCount, unknown.data.infoCount);
+  assert.equal(current.data.totalChecks, unknown.data.totalChecks);
+  assert.doesNotMatch(current.overviewText, /HA OS update status not checked/);
 });
