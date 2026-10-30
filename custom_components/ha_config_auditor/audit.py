@@ -16,6 +16,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import stat
 from typing import Any
 from urllib.parse import urlparse
 
@@ -414,12 +415,31 @@ def _scan_plaintext_secrets(config_dir: str) -> dict[str, Any]:
     truncated = False
     if not root.is_dir():
         return {"files_scanned": 0, "files_skipped": 0, "total": 0, "matches": [], "truncated": False, "complete": False}
-    for current, dirs, files in os.walk(root):
+    def on_directory_read_error(_error: OSError) -> None:
+        nonlocal skipped_files
+        # os.walk otherwise silently drops unreadable selected subtrees.
+        skipped_files += 1
+
+    for current, dirs, files in os.walk(root, onerror=on_directory_read_error, followlinks=False):
         rel_dir = Path(current).relative_to(root)
         depth = 0 if str(rel_dir) == "." else len(rel_dir.parts)
-        dirs[:] = sorted(
+        eligible = sorted(
             d for d in dirs if not d.startswith(".") and d not in _SKIP_DIRS and depth < SCAN_MAX_DEPTH
         )
+        dirs[:] = []
+        for dirname in eligible:
+            # os.walk(followlinks=False) intentionally does not enter linked
+            # directories. Count each omitted selected entry, otherwise
+            # the audit can incorrectly claim complete coverage.
+            try:
+                info = os.stat(Path(current) / dirname, follow_symlinks=False)
+                if not stat.S_ISDIR(info.st_mode):
+                    skipped_files += 1
+                    continue
+            except OSError:
+                skipped_files += 1
+                continue
+            dirs.append(dirname)
         for name in sorted(files):
             if not name.endswith((".yaml", ".yml")) or name.startswith("secrets."):
                 continue
@@ -428,11 +448,33 @@ def _scan_plaintext_secrets(config_dir: str) -> dict[str, Any]:
                 break
             path = Path(current) / name
             try:
-                if path.is_symlink() or path.stat().st_size > SCAN_MAX_FILE_BYTES:
+                # A pathname pre-check followed by read_text() can follow a
+                # replacement symlink, block on a FIFO or read without limit.
+                no_follow = getattr(os, "O_NOFOLLOW", None)
+                if no_follow is None:
                     skipped_files += 1
                     continue
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
+                flags = os.O_RDONLY | no_follow | getattr(os, "O_NONBLOCK", 0)
+                with os.fdopen(os.open(path, flags), "rb") as handle:
+                    before = os.fstat(handle.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size > SCAN_MAX_FILE_BYTES:
+                        skipped_files += 1
+                        continue
+                    raw = handle.read(SCAN_MAX_FILE_BYTES + 1)
+                    after = os.fstat(handle.fileno())
+                # Do not declare a complete scan when the file grew, changed
+                # during reading, or its pathname was replaced after open.
+                path_after_read = os.stat(path, follow_symlinks=False)
+                identity = lambda info: (info.st_dev, info.st_ino)
+                revision = lambda info: (info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+                if (len(raw) != before.st_size or len(raw) > SCAN_MAX_FILE_BYTES or identity(before) != identity(path_after_read)
+                    or identity(before) != identity(after) or revision(before) != revision(after)
+                    or revision(before) != revision(path_after_read)):
+                    skipped_files += 1
+                    continue
+                text = raw.decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                # Malformed bytes must not become a false "no secrets" PASS.
                 skipped_files += 1
                 continue
             scanned += 1
