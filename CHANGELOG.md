@@ -1,3 +1,9 @@
+## 6.1.1 (2026-10-30)
+
+- Report the YAML secret scan as incomplete when a file could be read only in part, changed while it was read, is not valid UTF-8, or is a FIFO, device or linked directory. 6.1.0 could count such a file as scanned and the audit as complete; a FIFO could block the scan.
+- Treat add-on update status as confirmed only when the Supervisor reports a boolean. Missing or malformed status appears as Not checked in Overview and Findings, never as "All addons up to date", and the Add-ons table shows an update arrow only for a confirmed update.
+- Keep the complete card and integration bundles identical.
+
 ## 6.1.0 (2026-10-14)
 
 - Show incomplete or malformed HA OS update metadata in a separate neutral Not checked summary counter and visible Overview rows, without increasing Passed or double-counting Info.

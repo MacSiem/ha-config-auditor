@@ -1,4 +1,4 @@
-/* HA Tools split — ha-config-auditor v6.1.0 (2026-10-14) — single-tool standalone repo */
+/* HA Tools split — ha-config-auditor v6.1.1 (2026-10-30) — single-tool standalone repo */
 (function() {
 'use strict';
 
@@ -1192,6 +1192,10 @@ const AUDIT_COPY_PL = {
   "Update addons via Settings → Add-ons": "Zaktualizuj dodatki przez Ustawienia → Dodatki",
   "All addons up to date": "Wszystkie dodatki są aktualne",
   "{0} addon(s) installed": "Zainstalowane dodatki: {0}",
+  "Add-on update status not checked": "Nie sprawdzono aktualizacji dodatków",
+  "Update status unavailable for {0} of {1} installed add-ons.": "Brak potwierdzonego stanu aktualizacji dla {0} z {1} zainstalowanych dodatków.",
+  "Known updates: {0}. Update status unknown for {1} of {2} add-ons.": "Potwierdzone aktualizacje: {0}. Stan aktualizacji nieznany dla {1} z {2} dodatków.",
+  "Review add-on update status in Settings → Add-ons and refresh the audit.": "Sprawdź dostępność aktualizacji w Ustawienia → Dodatki i odśwież audyt.",
   "{0} addon(s) use host networking": "Dodatki korzystające z sieci hosta: {0}",
   "Verify these addons require host network access": "Sprawdź, czy te dodatki wymagają dostępu do sieci hosta",
   "{0} addon(s) with protection disabled": "Dodatki z wyłączoną ochroną: {0}",
@@ -2237,9 +2241,27 @@ class HAConfigAuditor extends HTMLElement {
       // /addons lists installed add-ons without an `installed` flag.
       const installedAddons = addons.filter(a => a.installed !== false);
 
-      const outdatedAddons = installedAddons.filter(a => a.update_available);
+      // The Supervisor /addons response has explicit boolean update_available.
+      // A missing/null/string field is NOT evidence of an up-to-date add-on.
+      const outdatedAddons = installedAddons.filter(a => a?.update_available === true);
+      const unknownUpdates = installedAddons.filter(a => a?.update_available !== true && a?.update_available !== false);
       if (outdatedAddons.length > 0) {
-        findings.warning.push({ id: 'addon_updates', title: `${outdatedAddons.length} addon(s) have updates`, desc: outdatedAddons.map(a => `${(a.name)}: ${a.version} \u2192 ${a.version_latest}`).join(', '), fix: 'Update addons via Settings \u2192 Add-ons' });
+        const knownUpdates = outdatedAddons.map(a => `${a.name}: ${a.version} \u2192 ${a.version_latest}`).join(', ');
+        findings.warning.push({
+          id: 'addon_updates',
+          title: `${outdatedAddons.length} addon(s) have updates`,
+          desc: unknownUpdates.length
+            ? `Known updates: ${knownUpdates}. Update status unknown for ${unknownUpdates.length} of ${installedAddons.length} add-ons.`
+            : knownUpdates,
+          fix: 'Update addons via Settings \u2192 Add-ons',
+        });
+      } else if (unknownUpdates.length > 0) {
+        findings.info.push({
+          id: 'addon_updates', resultState: 'not_checked', verified: false,
+          title: 'Add-on update status not checked',
+          desc: `Update status unavailable for ${unknownUpdates.length} of ${installedAddons.length} installed add-ons.`,
+          fix: 'Review add-on update status in Settings → Add-ons and refresh the audit.',
+        });
       } else if (installedAddons.length > 0) {
         findings.pass.push({ id: 'addon_updates', title: 'All addons up to date', desc: `${installedAddons.length} addon(s) installed` });
       }
@@ -3484,7 +3506,7 @@ ${_RESPONSIVE_CONTROL_CSS}${_CONFIG_INVENTORY_CSS}
     if (!d.addons.length) {
       return '<div class="empty-msg">No addons installed</div>';
     }
-    return `<div class="table-container"><table class="entity-table" data-config-inventory="addons"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available; return `<tr data-inventory-key="${_esc(a.slug || a.name || '')}"><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'unknown'))}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? this._msg('N/A') : prot ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? this._msg('N/A') : autoUp ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? this._msg('N/A') : hostNet ? '\u26A0 ' + this._msg('Yes') : this._msg('No')}</td></tr>`; }).join('')}</tbody></table></div>`;
+    return `<div class="table-container"><table class="entity-table" data-config-inventory="addons"><thead><tr><th>Addon</th><th>Version</th><th>State</th><th>Protection</th><th>Auto-update</th><th>Host Network</th></tr></thead><tbody>${d.addons.map(a => { const prot = typeof a.protected === 'boolean' ? a.protected : null; const autoUp = typeof a.auto_update === 'boolean' ? a.auto_update : null; const hostNet = typeof a.host_network === 'boolean' ? a.host_network : null; const updateAvail = a.update_available === true; return `<tr data-inventory-key="${_esc(a.slug || a.name || '')}"><td>${_esc(a.name || a.slug)}${updateAvail ? ' \u2B06\uFE0F' : ''}</td><td>${_esc(a.version || '-')}${updateAvail ? ` \u2192 ${_esc(a.version_latest)}` : ''}</td><td><span class="status-dot" style="background:${a.state === 'started' ? '#4caf50' : '#9e9e9e'}"></span>${_esc(this._msg(a.state || 'unknown'))}</td><td style="color:${prot === null ? 'var(--bento-text-secondary)' : prot ? '#4caf50' : '#f44336'}">${prot === null ? this._msg('N/A') : prot ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${autoUp === null ? 'var(--bento-text-secondary)' : autoUp ? '#4caf50' : '#ff9800'}">${autoUp === null ? this._msg('N/A') : autoUp ? '\u2713 ' + this._msg('On') : '\u2717 ' + this._msg('Off')}</td><td style="color:${hostNet ? '#ff9800' : 'var(--bento-text-secondary)'}">${hostNet === null ? this._msg('N/A') : hostNet ? '\u26A0 ' + this._msg('Yes') : this._msg('No')}</td></tr>`; }).join('')}</tbody></table></div>`;
   }
 
   _renderUsers(d) {
@@ -3730,7 +3752,7 @@ if (!customElements.get('ha-config-auditor')) {
 }
 
 console.info(
-  '%c  HA-CONFIG-AUDITOR  %c v6.1.0 ',
+  '%c  HA-CONFIG-AUDITOR  %c v6.1.1 ',
   'background: #f44336; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px 0 0 4px;',
   'background: #ffebee; color: #f44336; font-weight: bold; padding: 2px 6px; border-radius: 0 4px 4px 0;'
 );
